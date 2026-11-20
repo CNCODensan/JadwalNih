@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">JadwalNih</string>
+    <string name="nav_jadwal">Jadwal</string>
+    <string name="nav_matriks">Matriks</string>
+    <string name="nav_fokus">Fokus</string>
+    <string name="nav_rekap">Rekap</string>
+    <string name="nav_analitik">Analitik</string>
+    <string name="notification_channel_name">Pengingat Jadwal</string>
+    <string name="notification_channel_desc">Notifikasi pengingat kegiatan dan jadwal berulang JadwalNih</string>
+</resources>

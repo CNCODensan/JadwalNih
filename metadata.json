@@ -1,0 +1,6 @@
+{
+  "name": "JadwalNih",
+  "description": "Aplikasi pengelola jadwal harian, mingguan, dan bulanan berbahasa Indonesia dengan matriks prioritas 4 kuadran, timer fokus kustom, rekap foto harian, serta analitik produktivitas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
