@@ -3,116 +3,142 @@ package com.example.ui.theme
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import com.example.domain.MainTab
 
-// Light Mode — Airy Periwinkle & Lilac Pastels
-val LightBackground = Color(0xFFF3F5FF)
-val LightBackgroundBottom = Color(0xFFF7F2FF)
-val LightSurface = Color(0xD9FFFFFF) // Frosted translucent white
-val LightSurfaceVariant = Color(0xFFEAEFFE)
-val LightPrimary = Color(0xFF4F6BF6) // Periwinkle Cobalt
+// Light Mode — Clean Neutral Canvas + Happy Pesisir Multi-Accents
+val LightBackground = Color(0xFFF5F7FA)
+val LightSurface = Color(0xFFFFFFFF)
+val LightSurfaceVariant = Color(0xFFEDF1F7)
+val LightPrimary = Color(0xFF1677FF)          // Pesisir Cobalt Blue
 val LightOnPrimary = Color(0xFFFFFFFF)
-val LightPrimaryContainer = Color(0xFFE0E7FF)
-val LightOnPrimaryContainer = Color(0xFF1E2B7A)
-val LightSecondary = Color(0xFF8B5CF6) // Soft Lilac Violet
+val LightPrimaryContainer = Color(0xFFE0ECFF)
+val LightOnPrimaryContainer = Color(0xFF0B3B8C)
+val LightSecondary = Color(0xFF10B981)        // Command Center Fresh Mint
 val LightOnSecondary = Color(0xFFFFFFFF)
-val LightSecondaryContainer = Color(0xFFEDE9FE)
-val LightOnSecondaryContainer = Color(0xFF3B1D8E)
-val LightTertiary = Color(0xFF38BDF8)
-val LightOnTertiary = Color(0xFF082F49)
-val LightTertiaryContainer = Color(0xFFE0F2FE)
-val LightOnTertiaryContainer = Color(0xFF0C4A6E)
-val LightOnBackground = Color(0xFF17193B)
-val LightOnSurface = Color(0xFF17193B)
-val LightOnSurfaceVariant = Color(0xFF565B85)
-val LightOutline = Color(0xFFC7D2FE)
-val LightOutlineVariant = Color(0xFFDDE3FA)
-val LightError = Color(0xFFE11D48)
+val LightSecondaryContainer = Color(0xFFD1FAE5)
+val LightOnSecondaryContainer = Color(0xFF065F46)
+val LightTertiary = Color(0xFFF97316)         // Pesisir Tangerine Orange
+val LightOnTertiary = Color(0xFFFFFFFF)
+val LightTertiaryContainer = Color(0xFFFFEDD5)
+val LightOnTertiaryContainer = Color(0xFF9A3412)
+val LightOnBackground = Color(0xFF111827)
+val LightOnSurface = Color(0xFF111827)
+val LightOnSurfaceVariant = Color(0xFF4B5563)
+val LightOutline = Color(0xFFCBD5E1)
+val LightOutlineVariant = Color(0xFFE2E8F0)
+val LightError = Color(0xFFEE3E38)            // Pesisir Coral Red
 val LightOnError = Color(0xFFFFFFFF)
 
-// Dark Mode — Midnight Indigo & Glowing Electric Blue-Violet
-val DarkBackground = Color(0xFF070B19)
-val DarkBackgroundBottom = Color(0xFF0E1230)
-val DarkSurface = Color(0xB8121938) // Frosted midnight glass
-val DarkSurfaceVariant = Color(0xFF1A2248)
-val DarkPrimary = Color(0xFF60A5FA) // Electric Sky Blue
-val DarkOnPrimary = Color(0xFF061539)
-val DarkPrimaryContainer = Color(0xFF1E2B6B)
+// Dark Mode — Clean Midnight Slate (OPPO Dark Style) + Crisp White Text
+val DarkBackground = Color(0xFF0E121B)
+val DarkSurface = Color(0xFF1B212E)
+val DarkSurfaceVariant = Color(0xFF262E3F)
+val DarkPrimary = Color(0xFF3B82F6)           // Electric Cobalt Blue
+val DarkOnPrimary = Color(0xFFFFFFFF)
+val DarkPrimaryContainer = Color(0xFF1D355E)
 val DarkOnPrimaryContainer = Color(0xFFDBEAFE)
-val DarkSecondary = Color(0xFFA78BFA) // Luminous Lavender Violet
-val DarkOnSecondary = Color(0xFF1E1047)
-val DarkSecondaryContainer = Color(0xFF2E1F66)
-val DarkOnSecondaryContainer = Color(0xFFEDE9FE)
-val DarkTertiary = Color(0xFF38BDF8)
-val DarkOnTertiary = Color(0xFF082F49)
-val DarkTertiaryContainer = Color(0xFF12365E)
-val DarkOnTertiaryContainer = Color(0xFFE0F2FE)
-val DarkOnBackground = Color(0xFFF1F5FF)
-val DarkOnSurface = Color(0xFFF1F5FF)
-val DarkOnSurfaceVariant = Color(0xFFA2ADD1)
-val DarkOutline = Color(0xFF3B4882)
-val DarkOutlineVariant = Color(0xFF242E5C)
-val DarkError = Color(0xFFFB7185)
-val DarkOnError = Color(0xFF4C0519)
+val DarkSecondary = Color(0xFF34D399)         // Fresh Mint
+val DarkOnSecondary = Color(0xFF062E22)
+val DarkSecondaryContainer = Color(0xFF123F33)
+val DarkOnSecondaryContainer = Color(0xFFD1FAE5)
+val DarkTertiary = Color(0xFFFB923C)          // Tangerine Orange
+val DarkOnTertiary = Color(0xFF2B1203)
+val DarkTertiaryContainer = Color(0xFF4E2610)
+val DarkOnTertiaryContainer = Color(0xFFFFEDD5)
+val DarkOnBackground = Color(0xFFF8FAFC)
+val DarkOnSurface = Color(0xFFF8FAFC)
+val DarkOnSurfaceVariant = Color(0xFFCBD5E1)
+val DarkOutline = Color(0xFF475569)
+val DarkOutlineVariant = Color(0xFF2D374B)
+val DarkError = Color(0xFFFB5A54)             // Bright Coral Red
+val DarkOnError = Color(0xFFFFFFFF)
 
 @Immutable
 data class AtmospherePalette(
     val isDark: Boolean,
     val bgTop: Color,
-    val bgBottom: Color,
-    val orbBlue: Color,
-    val orbPurple: Color,
-    val glassFillTop: Color,
-    val glassFillBottom: Color,
-    val glassBorderStart: Color,
-    val glassBorderEnd: Color,
-    val heroGradStart: Color,
-    val heroGradMid: Color,
-    val heroGradEnd: Color,
+    val cardBg: Color,
+    val cardAltBg: Color,
+    val cardBorder: Color,
+    val heroSolidBg: Color,
     val heroOnPrimary: Color,
     val heroSubtleBg: Color,
-    val accentBlue: Color,
-    val accentPurple: Color,
     val navBarFill: Color,
-)
+    val sheetBg: Color,
+    val sheetScrim: Color,
+    val sheetCardBg: Color,
+    // 5 Happy Solid Multi-Accents (Pesisir + Command Center)
+    val accentCobalt: Color,
+    val onAccentCobalt: Color,
+    val accentCoral: Color,
+    val onAccentCoral: Color,
+    val accentOrange: Color,
+    val onAccentOrange: Color,
+    val accentAmber: Color,
+    val onAccentAmber: Color,
+    val accentMint: Color,
+    val onAccentMint: Color,
+    val accentSky: Color,
+) {
+    fun tabAccent(tab: MainTab): Pair<Color, Color> = when (tab) {
+        MainTab.JADWAL -> accentCobalt to onAccentCobalt
+        MainTab.MATRIKS -> accentCoral to onAccentCoral
+        MainTab.FOKUS -> accentOrange to onAccentOrange
+        MainTab.REKAP -> accentMint to onAccentMint
+        MainTab.ANALITIK -> accentAmber to onAccentAmber
+    }
+}
 
 val LightAtmospherePalette = AtmospherePalette(
     isDark = false,
-    bgTop = Color(0xFFF1F4FF),
-    bgBottom = Color(0xFFF7F1FF),
-    orbBlue = Color(0xFFA5B4FC).copy(alpha = 0.34f),
-    orbPurple = Color(0xFFD8B4FE).copy(alpha = 0.32f),
-    glassFillTop = Color(0xE8FFFFFF),
-    glassFillBottom = Color(0xCCF5F3FF),
-    glassBorderStart = Color(0xFFBAC8FF),
-    glassBorderEnd = Color(0xFFDDD6FE),
-    heroGradStart = Color(0xFF4F6BF6),
-    heroGradMid = Color(0xFF6B5CF6),
-    heroGradEnd = Color(0xFF9353F6),
+    bgTop = Color(0xFFF5F7FA),
+    cardBg = Color(0xFFFFFFFF),
+    cardAltBg = Color(0xFFEDF1F7),
+    cardBorder = Color(0xFFE2E8F0),
+    heroSolidBg = Color(0xFF1677FF),
     heroOnPrimary = Color(0xFFFFFFFF),
-    heroSubtleBg = Color(0x33FFFFFF),
-    accentBlue = Color(0xFF4F6BF6),
-    accentPurple = Color(0xFF8B5CF6),
-    navBarFill = Color(0xEBFFFFFF),
+    heroSubtleBg = Color(0x2EFFFFFF),
+    navBarFill = Color(0xFFFFFFFF),
+    sheetBg = Color(0xFFFFFFFF),
+    sheetScrim = Color(0x8A0F172A),
+    sheetCardBg = Color(0xFFF4F6FA),
+    accentCobalt = Color(0xFF1677FF),
+    onAccentCobalt = Color(0xFFFFFFFF),
+    accentCoral = Color(0xFFEE3E38),
+    onAccentCoral = Color(0xFFFFFFFF),
+    accentOrange = Color(0xFFF97316),
+    onAccentOrange = Color(0xFFFFFFFF),
+    accentAmber = Color(0xFFFACC15),
+    onAccentAmber = Color(0xFF18181B),
+    accentMint = Color(0xFF10B981),
+    onAccentMint = Color(0xFFFFFFFF),
+    accentSky = Color(0xFF0EA5E9),
 )
 
 val DarkAtmospherePalette = AtmospherePalette(
     isDark = true,
-    bgTop = Color(0xFF060A17),
-    bgBottom = Color(0xFF0F1336),
-    orbBlue = Color(0xFF2563EB).copy(alpha = 0.24f),
-    orbPurple = Color(0xFF7C3AED).copy(alpha = 0.22f),
-    glassFillTop = Color(0xBF141C3E),
-    glassFillBottom = Color(0xA6101532),
-    glassBorderStart = Color(0x7060A5FA),
-    glassBorderEnd = Color(0x59A78BFA),
-    heroGradStart = Color(0xFF1D4ED8),
-    heroGradMid = Color(0xFF4338CA),
-    heroGradEnd = Color(0xFF6D28D9),
-    heroOnPrimary = Color(0xFFF8FAFF),
+    bgTop = Color(0xFF0E121B),
+    cardBg = Color(0xFF1B212E),
+    cardAltBg = Color(0xFF262E3F),
+    cardBorder = Color(0xFF2D374B),
+    heroSolidBg = Color(0xFF1D4ED8),
+    heroOnPrimary = Color(0xFFFFFFFF),
     heroSubtleBg = Color(0x2BFFFFFF),
-    accentBlue = Color(0xFF60A5FA),
-    accentPurple = Color(0xFFA78BFA),
-    navBarFill = Color(0xEB0E1430),
+    navBarFill = Color(0xFF1B212E),
+    sheetBg = Color(0xFF161B27),
+    sheetScrim = Color(0xBA050811),
+    sheetCardBg = Color(0xFF22293A),
+    accentCobalt = Color(0xFF3B82F6),
+    onAccentCobalt = Color(0xFFFFFFFF),
+    accentCoral = Color(0xFFFB5A54),
+    onAccentCoral = Color(0xFFFFFFFF),
+    accentOrange = Color(0xFFFB923C),
+    onAccentOrange = Color(0xFF1C1005),
+    accentAmber = Color(0xFFFACC15),
+    onAccentAmber = Color(0xFF18181B),
+    accentMint = Color(0xFF34D399),
+    onAccentMint = Color(0xFF052E21),
+    accentSky = Color(0xFF38BDF8),
 )
 
 @Immutable
@@ -138,45 +164,45 @@ data class SemanticStatusPalette(
 )
 
 val LightStatusPalette = SemanticStatusPalette(
-    greenBg = Color(0xFFDCFCE7),
-    greenFg = Color(0xFF14532D),
-    greenAccent = Color(0xFF16A34A),
-    yellowBg = Color(0xFFFEF3C7),
-    yellowFg = Color(0xFF78350F),
-    yellowAccent = Color(0xFFD97706),
-    redBg = Color(0xFFFFE4E6),
-    redFg = Color(0xFF881337),
-    redAccent = Color(0xFFE11D48),
-    grayBg = Color(0xFFEEF0FA),
-    grayFg = Color(0xFF3E436B),
-    grayAccent = Color(0xFF646C9A),
-    darkBg = Color(0xFF17193B),
-    darkFg = Color(0xFFF8FAFF),
-    darkAccent = Color(0xFF0F1029),
-    blueBg = Color(0xFFE0E7FF),
-    blueFg = Color(0xFF1E3A8A),
-    blueAccent = Color(0xFF4F6BF6),
+    greenBg = Color(0xFFD1FAE5),
+    greenFg = Color(0xFF065F46),
+    greenAccent = Color(0xFF10B981),
+    yellowBg = Color(0xFFFFEDD5),
+    yellowFg = Color(0xFF9A3412),
+    yellowAccent = Color(0xFFF97316),
+    redBg = Color(0xFFFEE2E2),
+    redFg = Color(0xFF991B1B),
+    redAccent = Color(0xFFEE3E38),
+    grayBg = Color(0xFFF1F5F9),
+    grayFg = Color(0xFF334155),
+    grayAccent = Color(0xFF64748B),
+    darkBg = Color(0xFF1E293B),
+    darkFg = Color(0xFFFFFFFF),
+    darkAccent = Color(0xFF0F172A),
+    blueBg = Color(0xFFDBEAFE),
+    blueFg = Color(0xFF1E40AF),
+    blueAccent = Color(0xFF1677FF),
 )
 
 val DarkStatusPalette = SemanticStatusPalette(
-    greenBg = Color(0xFF14532D).copy(alpha = 0.65f),
-    greenFg = Color(0xFF86EFAC),
-    greenAccent = Color(0xFF4ADE80),
-    yellowBg = Color(0xFF78350F).copy(alpha = 0.65f),
-    yellowFg = Color(0xFFFDE68A),
-    yellowAccent = Color(0xFFFBBF24),
-    redBg = Color(0xFF881337).copy(alpha = 0.65f),
-    redFg = Color(0xFFFDA4AF),
-    redAccent = Color(0xFFFB7185),
-    grayBg = Color(0xFF232C57).copy(alpha = 0.85f),
-    grayFg = Color(0xFFCBD5F5),
-    grayAccent = Color(0xFF94A3D1),
-    darkBg = Color(0xFF050814),
-    darkFg = Color(0xFFE2E8FF),
-    darkAccent = Color(0xFF6366F1),
-    blueBg = Color(0xFF1E3A8A).copy(alpha = 0.68f),
+    greenBg = Color(0xFF123F33),
+    greenFg = Color(0xFF6EE7B7),
+    greenAccent = Color(0xFF34D399),
+    yellowBg = Color(0xFF4A250E),
+    yellowFg = Color(0xFFFDBA74),
+    yellowAccent = Color(0xFFFB923C),
+    redBg = Color(0xFF4B1A1D),
+    redFg = Color(0xFFFCA5A5),
+    redAccent = Color(0xFFFB5A54),
+    grayBg = Color(0xFF262E3F),
+    grayFg = Color(0xFFE2E8F0),
+    grayAccent = Color(0xFF94A3B8),
+    darkBg = Color(0xFF361D29),
+    darkFg = Color(0xFFFECDD3),
+    darkAccent = Color(0xFFF43F5E),
+    blueBg = Color(0xFF1A335C),
     blueFg = Color(0xFF93C5FD),
-    blueAccent = Color(0xFF60A5FA),
+    blueAccent = Color(0xFF3B82F6),
 )
 
 val LocalStatusPalette = staticCompositionLocalOf { LightStatusPalette }

@@ -21,6 +21,7 @@ class TaskReminderReceiver : BroadcastReceiver() {
         val title = intent.getStringExtra(EXTRA_TASK_TITLE) ?: "Kegiatan JadwalNih"
         val timeLabel = intent.getStringExtra(EXTRA_TIME_LABEL) ?: ""
         val quadrantLabel = intent.getStringExtra(EXTRA_QUADRANT_LABEL) ?: ""
+        val isCheckIn = intent.getBooleanExtra(EXTRA_IS_CHECK_IN, false)
 
         ensureChannel(context)
 
@@ -37,23 +38,34 @@ class TaskReminderReceiver : BroadcastReceiver() {
         }
         val pendingOpen = PendingIntent.getActivity(
             context,
-            taskId.toInt(),
+            taskId.toInt() + if (isCheckIn) 100_000 else 0,
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
+        val notifTitle = if (isCheckIn) {
+            "Sedang ikut \"$title\"?"
+        } else {
+            "Pengingat: $title"
+        }
+
         val bodyText = buildString {
-            if (timeLabel.isNotBlank()) append("Waktu: $timeLabel")
-            if (quadrantLabel.isNotBlank()) {
-                if (isNotEmpty()) append(" • ")
-                append(quadrantLabel)
+            if (isCheckIn) {
+                append("Ketuk untuk konfirmasi kehadiranmu")
+                if (timeLabel.isNotBlank()) append(" • $timeLabel")
+            } else {
+                if (timeLabel.isNotBlank()) append("Waktu: $timeLabel")
+                if (quadrantLabel.isNotBlank()) {
+                    if (isNotEmpty()) append(" • ")
+                    append(quadrantLabel)
+                }
+                if (isEmpty()) append("Saatnya bersiap memulai kegiatanmu.")
             }
-            if (isEmpty()) append("Saatnya bersiap memulai kegiatanmu.")
         }
 
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Pengingat: $title")
+            .setContentTitle(notifTitle)
             .setContentText(bodyText)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
@@ -61,7 +73,8 @@ class TaskReminderReceiver : BroadcastReceiver() {
             .build()
 
         runCatching {
-            NotificationManagerCompat.from(context).notify(taskId.toInt(), notification)
+            val notifId = taskId.toInt() + if (isCheckIn) 100_000 else 0
+            NotificationManagerCompat.from(context).notify(notifId, notification)
         }
     }
 
@@ -71,6 +84,7 @@ class TaskReminderReceiver : BroadcastReceiver() {
         const val EXTRA_TASK_TITLE = "extra_task_title"
         const val EXTRA_TIME_LABEL = "extra_time_label"
         const val EXTRA_QUADRANT_LABEL = "extra_quadrant_label"
+        const val EXTRA_IS_CHECK_IN = "extra_is_check_in"
 
         fun ensureChannel(context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

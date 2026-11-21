@@ -82,7 +82,7 @@ fun QuadrantChip(
         PriorityQuadrant.Q1_IMPORTANT_URGENT -> palette.redBg to palette.redFg
         PriorityQuadrant.Q2_IMPORTANT_NOT_URGENT -> palette.blueBg to palette.blueFg
         PriorityQuadrant.Q3_NOT_IMPORTANT_URGENT -> palette.yellowBg to palette.yellowFg
-        PriorityQuadrant.Q4_NOT_IMPORTANT_NOT_URGENT -> palette.grayBg to palette.grayFg
+        PriorityQuadrant.Q4_NOT_IMPORTANT_NOT_URGENT -> palette.greenBg to palette.greenFg
     }
     Surface(
         modifier = modifier,

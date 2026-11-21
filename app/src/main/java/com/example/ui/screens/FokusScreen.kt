@@ -1,13 +1,25 @@
 package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,31 +47,28 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -72,7 +81,17 @@ import com.example.domain.DateTimeHelper
 import com.example.domain.ScheduleTask
 import com.example.ui.JadwalNihUiState
 import com.example.ui.components.AtmosphericBackground
+import com.example.ui.components.BouncyButton
+import com.example.ui.components.BouncyFilledTonalButton
+import com.example.ui.components.BouncyIconButton
+import com.example.ui.components.BouncyOutlinedButton
 import com.example.ui.components.FrostedGlassCard
+import com.example.ui.components.bouncyPress
+import com.example.ui.components.shakeOnTrigger
+import com.example.ui.components.tapConfirm
+import com.example.ui.components.tapSoft
+import com.example.ui.components.tapTick
+import com.example.ui.components.tapWarning
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.MonoSmallStyle
 
@@ -92,7 +111,15 @@ fun FokusScreen(
 ) {
     val timer = state.focusTimer
     val atmo = LocalAtmospherePalette.current
+    val haptics = LocalHapticFeedback.current
     var taskMenuExpanded by remember { mutableStateOf(false) }
+    var invalidInputShake by remember { mutableIntStateOf(0) }
+    LaunchedEffect(timer.validationError) {
+        if (timer.validationError != null) {
+            invalidInputShake += 1
+            haptics.tapWarning()
+        }
+    }
     val activeTasks = remember(state.allTasksWithStatus) {
         state.allTasksWithStatus.filterNot { it.task.isCompleted }.map { it.task }
     }
@@ -117,6 +144,7 @@ fun FokusScreen(
                 Text(
                     text = "Timer Fokus",
                     style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onBackground,
                 )
                 Text(
                     text = "Atur durasi bebas 1–240 menit, tanpa aturan kaku.",
@@ -134,12 +162,45 @@ fun FokusScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .animateContentSize(
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                stiffness = Spring.StiffnessMediumLow,
+                            ),
+                        )
                         .padding(18.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     val totalSecs = (timer.plannedMinutes * 60).coerceAtLeast(1)
-                    val progress = (timer.remainingSeconds.toFloat() / totalSecs.toFloat()).coerceIn(0f, 1f)
+                    val targetProgress = (timer.remainingSeconds.toFloat() / totalSecs.toFloat()).coerceIn(0f, 1f)
+                    val animatedProgress by animateFloatAsState(
+                        targetValue = targetProgress,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow,
+                        ),
+                        label = "focus_ring_progress",
+                    )
+                    val ringAccent by animateColorAsState(
+                        targetValue = when {
+                            timer.isRunning -> atmo.accentOrange
+                            timer.isPaused -> atmo.accentAmber
+                            else -> atmo.accentOrange
+                        },
+                        animationSpec = tween(durationMillis = 320),
+                        label = "focus_ring_accent",
+                    )
+                    val ringBreathTransition = rememberInfiniteTransition(label = "focus_ring_breath")
+                    val breathScale by ringBreathTransition.animateFloat(
+                        initialValue = 0.96f,
+                        targetValue = 1.035f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(durationMillis = 1600),
+                            repeatMode = RepeatMode.Reverse,
+                        ),
+                        label = "focus_breath_scale",
+                    )
                     val trackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
 
                     Box(
@@ -148,9 +209,10 @@ fun FokusScreen(
                     ) {
                         Canvas(modifier = Modifier.fillMaxSize()) {
                             val strokeWidth = 14.dp.toPx()
+                            val activeBreath = if (timer.isRunning) breathScale else 1f
                             drawCircle(
-                                color = atmo.accentPurple.copy(alpha = 0.08f),
-                                radius = size.minDimension / 2f,
+                                color = ringAccent.copy(alpha = if (timer.isRunning) 0.14f else 0.08f),
+                                radius = (size.minDimension / 2f) * activeBreath,
                             )
                             drawArc(
                                 color = trackColor,
@@ -160,11 +222,9 @@ fun FokusScreen(
                                 style = Stroke(width = strokeWidth),
                             )
                             drawArc(
-                                brush = Brush.sweepGradient(
-                                    colors = listOf(atmo.accentBlue, atmo.accentPurple, atmo.accentBlue),
-                                ),
+                                color = ringAccent,
                                 startAngle = -90f,
-                                sweepAngle = 360f * progress,
+                                sweepAngle = 360f * animatedProgress,
                                 useCenter = false,
                                 style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
                             )
@@ -176,40 +236,55 @@ fun FokusScreen(
                                 color = MaterialTheme.colorScheme.onSurface,
                                 modifier = Modifier.testTag("focus_countdown_text"),
                             )
-                            Text(
-                                text = when {
+                            AnimatedContent(
+                                targetState = when {
                                     timer.isRunning -> "Sedang fokus..."
                                     timer.isPaused -> "Dijeda"
                                     else -> "Target ${timer.plannedMinutes} menit"
                                 },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                                transitionSpec = { fadeIn(tween(180)).togetherWith(fadeOut(tween(140))) },
+                                label = "focus_status_text",
+                            ) { statusLabel ->
+                                Text(
+                                    text = statusLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = ringAccent,
+                                )
+                            }
                         }
                     }
 
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .shakeOnTrigger(invalidInputShake),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
                             text = "Durasi (Menit)",
                             style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            OutlinedButton(
-                                onClick = { onStepMinutes(-5) },
+                            BouncyOutlinedButton(
+                                onClick = {
+                                    haptics.tapTick()
+                                    onStepMinutes(-5)
+                                },
                                 enabled = !timer.hasActiveSession,
                                 modifier = Modifier.minimumInteractiveComponentSize(),
                             ) {
                                 Text("-5")
                             }
-                            IconButton(
-                                onClick = { onStepMinutes(-1) },
+                            BouncyIconButton(
+                                onClick = {
+                                    haptics.tapTick()
+                                    onStepMinutes(-1)
+                                },
                                 enabled = !timer.hasActiveSession,
                                 modifier = Modifier.minimumInteractiveComponentSize(),
                             ) {
@@ -229,15 +304,21 @@ fun FokusScreen(
                                     .weight(1f)
                                     .testTag("focus_custom_minutes_input"),
                             )
-                            IconButton(
-                                onClick = { onStepMinutes(1) },
+                            BouncyIconButton(
+                                onClick = {
+                                    haptics.tapTick()
+                                    onStepMinutes(1)
+                                },
                                 enabled = !timer.hasActiveSession,
                                 modifier = Modifier.minimumInteractiveComponentSize(),
                             ) {
                                 Icon(Icons.Filled.Add, contentDescription = "Tambah 1 menit")
                             }
-                            OutlinedButton(
-                                onClick = { onStepMinutes(5) },
+                            BouncyOutlinedButton(
+                                onClick = {
+                                    haptics.tapTick()
+                                    onStepMinutes(5)
+                                },
                                 enabled = !timer.hasActiveSession,
                                 modifier = Modifier.minimumInteractiveComponentSize(),
                             ) {
@@ -254,8 +335,11 @@ fun FokusScreen(
                     }
 
                     Box(modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(
-                            onClick = { taskMenuExpanded = true },
+                        BouncyOutlinedButton(
+                            onClick = {
+                                haptics.tapSoft()
+                                taskMenuExpanded = true
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .minimumInteractiveComponentSize()
@@ -276,6 +360,7 @@ fun FokusScreen(
                             DropdownMenuItem(
                                 text = { Text("Bebas (tanpa tugas)") },
                                 onClick = {
+                                    haptics.tapSoft()
                                     taskMenuExpanded = false
                                     onSelectTask(null)
                                 },
@@ -284,6 +369,7 @@ fun FokusScreen(
                                 DropdownMenuItem(
                                     text = { Text(t.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                     onClick = {
+                                        haptics.tapSoft()
                                         taskMenuExpanded = false
                                         onSelectTask(t)
                                     },
@@ -292,36 +378,36 @@ fun FokusScreen(
                         }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        when {
-                            !timer.hasActiveSession -> {
-                                Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp)
-                                        .clip(RoundedCornerShape(14.dp))
-                                        .background(
-                                            brush = Brush.linearGradient(
-                                                colors = if (timer.validationError == null) {
-                                                    listOf(atmo.heroGradStart, atmo.heroGradEnd)
-                                                } else {
-                                                    listOf(Color.Gray.copy(alpha = 0.4f), Color.Gray.copy(alpha = 0.4f))
-                                                },
-                                            ),
-                                        ),
-                                ) {
-                                    Button(
-                                        onClick = onStart,
-                                        enabled = timer.validationError == null,
+                    AnimatedContent(
+                        targetState = Triple(timer.hasActiveSession, timer.isRunning, timer.validationError == null),
+                        transitionSpec = {
+                            (fadeIn(tween(180)) + scaleIn(initialScale = 0.94f))
+                                .togetherWith(fadeOut(tween(140)) + scaleOut(targetScale = 0.94f))
+                        },
+                        label = "focus_controls_morph",
+                    ) { (hasActive, isRunning, isValid) ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            when {
+                                !hasActive -> {
+                                    BouncyButton(
+                                        onClick = {
+                                            haptics.tapConfirm()
+                                            onStart()
+                                        },
+                                        enabled = isValid,
+                                        shape = RoundedCornerShape(14.dp),
                                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
-                                            containerColor = Color.Transparent,
-                                            contentColor = Color.White,
+                                            containerColor = atmo.accentOrange,
+                                            contentColor = atmo.onAccentOrange,
+                                            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                         ),
                                         modifier = Modifier
-                                            .fillMaxSize()
+                                            .weight(1f)
+                                            .height(48.dp)
                                             .testTag("focus_start_button"),
                                     ) {
                                         Icon(Icons.Filled.PlayArrow, contentDescription = null)
@@ -329,56 +415,68 @@ fun FokusScreen(
                                         Text("Mulai Fokus")
                                     }
                                 }
-                            }
-                            timer.isRunning -> {
-                                FilledTonalButton(
-                                    onClick = onPause,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp)
-                                        .testTag("focus_pause_button"),
-                                ) {
-                                    Icon(Icons.Filled.Pause, contentDescription = null)
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Jeda")
+                                isRunning -> {
+                                    BouncyFilledTonalButton(
+                                        onClick = {
+                                            haptics.tapSoft()
+                                            onPause()
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp)
+                                            .testTag("focus_pause_button"),
+                                    ) {
+                                        Icon(Icons.Filled.Pause, contentDescription = null)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Jeda")
+                                    }
+                                }
+                                else -> {
+                                    BouncyButton(
+                                        onClick = {
+                                            haptics.tapConfirm()
+                                            onResume()
+                                        },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(48.dp)
+                                            .testTag("focus_resume_button"),
+                                    ) {
+                                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Lanjutkan")
+                                    }
                                 }
                             }
-                            else -> {
-                                Button(
-                                    onClick = onResume,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .height(48.dp)
-                                        .testTag("focus_resume_button"),
-                                ) {
-                                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Lanjutkan")
-                                }
-                            }
-                        }
 
-                        if (timer.hasActiveSession) {
-                            OutlinedButton(
-                                onClick = onStopAndSave,
+                            if (hasActive) {
+                                BouncyOutlinedButton(
+                                    onClick = {
+                                        haptics.tapConfirm()
+                                        onStopAndSave()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("focus_stop_button"),
+                                ) {
+                                    Icon(Icons.Filled.Stop, contentDescription = null)
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Selesai")
+                                }
+                            }
+
+                            BouncyIconButton(
+                                onClick = {
+                                    haptics.tapSoft()
+                                    onReset()
+                                },
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(48.dp)
-                                    .testTag("focus_stop_button"),
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("focus_reset_button"),
                             ) {
-                                Icon(Icons.Filled.Stop, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text("Selesai")
+                                Icon(Icons.Filled.Refresh, contentDescription = "Reset Timer")
                             }
-                        }
-
-                        IconButton(
-                            onClick = onReset,
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("focus_reset_button"),
-                        ) {
-                            Icon(Icons.Filled.Refresh, contentDescription = "Reset Timer")
                         }
                     }
 
@@ -397,6 +495,7 @@ fun FokusScreen(
                                 Text(
                                     text = "Mode Minim Gangguan",
                                     style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.onSurface,
                                 )
                                 Text(
                                     text = "Layar tenang tanpa distraksi. Bebas keluar kapan aja.",
@@ -406,7 +505,10 @@ fun FokusScreen(
                             }
                             Switch(
                                 checked = timer.isDistractionFreeMode,
-                                onCheckedChange = onToggleDistractionFree,
+                                onCheckedChange = {
+                                    haptics.tapSoft()
+                                    onToggleDistractionFree(it)
+                                },
                                 modifier = Modifier.testTag("distraction_free_switch"),
                             )
                         }
@@ -419,6 +521,7 @@ fun FokusScreen(
             Text(
                 text = "Riwayat Fokus (${state.focusSessions.size})",
                 style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onBackground,
             )
         }
 
@@ -442,7 +545,9 @@ fun FokusScreen(
                 key = { it.id },
             ) { session ->
                 FrostedGlassCard(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .animateItem(),
                     cornerRadius = 14.dp,
                 ) {
                     Row(
@@ -459,6 +564,7 @@ fun FokusScreen(
                             Text(
                                 text = session.linkedTaskTitle ?: "Sesi Fokus Bebas",
                                 style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onSurface,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -475,13 +581,13 @@ fun FokusScreen(
                             Text(
                                 text = DateTimeHelper.formatCountdown(session.actualSeconds),
                                 style = MonoSmallStyle.copy(fontWeight = FontWeight.Bold),
-                                color = MaterialTheme.colorScheme.primary,
+                                color = atmo.accentOrange,
                             )
                             if (session.completedNaturally) {
                                 Icon(
                                     imageVector = Icons.Filled.CheckCircle,
                                     contentDescription = "Tuntas penuh",
-                                    tint = MaterialTheme.colorScheme.secondary,
+                                    tint = atmo.accentMint,
                                     modifier = Modifier.size(18.dp),
                                 )
                             }
@@ -503,6 +609,7 @@ private fun DistractionFreeFocusDialog(
 ) {
     val timer = state.focusTimer
     val atmo = LocalAtmospherePalette.current
+    val haptics = LocalHapticFeedback.current
     val pulseTransition = rememberInfiniteTransition(label = "focus_pulse")
     val pulseScale by pulseTransition.animateFloat(
         initialValue = 0.94f,
@@ -538,8 +645,11 @@ private fun DistractionFreeFocusDialog(
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedButton(
-                        onClick = onExitDistractionFree,
+                    BouncyOutlinedButton(
+                        onClick = {
+                            haptics.tapSoft()
+                            onExitDistractionFree()
+                        },
                         modifier = Modifier
                             .minimumInteractiveComponentSize()
                             .testTag("exit_distraction_free_button"),
@@ -561,19 +671,11 @@ private fun DistractionFreeFocusDialog(
                         Canvas(modifier = Modifier.fillMaxSize()) {
                             val radius = (size.minDimension / 2f) * if (timer.isRunning) pulseScale else 0.98f
                             drawCircle(
-                                brush = Brush.radialGradient(
-                                    colors = listOf(
-                                        atmo.accentPurple.copy(alpha = 0.24f),
-                                        atmo.accentBlue.copy(alpha = 0.12f),
-                                        Color.Transparent,
-                                    ),
-                                ),
+                                color = atmo.accentOrange.copy(alpha = 0.14f),
                                 radius = radius,
                             )
                             drawCircle(
-                                brush = Brush.sweepGradient(
-                                    colors = listOf(atmo.accentBlue, atmo.accentPurple, atmo.accentBlue),
-                                ),
+                                color = atmo.accentOrange,
                                 radius = radius * 0.85f,
                                 style = Stroke(width = 5.dp.toPx()),
                             )
@@ -598,8 +700,11 @@ private fun DistractionFreeFocusDialog(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     if (timer.isRunning) {
-                        FilledTonalButton(
-                            onClick = onPause,
+                        BouncyFilledTonalButton(
+                            onClick = {
+                                haptics.tapSoft()
+                                onPause()
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(52.dp),
@@ -609,8 +714,11 @@ private fun DistractionFreeFocusDialog(
                             Text("Jeda")
                         }
                     } else {
-                        Button(
-                            onClick = onResume,
+                        BouncyButton(
+                            onClick = {
+                                haptics.tapConfirm()
+                                onResume()
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(52.dp),
@@ -622,8 +730,11 @@ private fun DistractionFreeFocusDialog(
                     }
 
                     if (timer.hasActiveSession) {
-                        OutlinedButton(
-                            onClick = onStopAndSave,
+                        BouncyOutlinedButton(
+                            onClick = {
+                                haptics.tapConfirm()
+                                onStopAndSave()
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .height(52.dp),

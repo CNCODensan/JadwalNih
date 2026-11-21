@@ -6,5 +6,7 @@
     <string name="nav_rekap">Rekap</string>
     <string name="nav_analitik">Analitik</string>
     <string name="notification_channel_name">Pengingat Jadwal</string>
-    <string name="notification_channel_desc">Notifikasi pengingat kegiatan dan jadwal berulang JadwalNih</string>
+    <string name="notification_channel_desc">Notifikasi pengingat kegiatan, konfirmasi kehadiran, dan jadwal berulang JadwalNih</string>
+    <string name="settings_title">Pengaturan</string>
+    <string name="export_collage_label">Ekspor Kolase</string>
 </resources>

@@ -4,6 +4,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 object DateTimeHelper {
     private val indonesiaLocale = Locale("id", "ID")
@@ -52,6 +53,32 @@ object DateTimeHelper {
         return cal
     }
 
+    fun isoToUtcDatePickerMillis(dateIso: String): Long {
+        val parts = dateIso.split("-")
+        val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC"))
+        if (parts.size == 3) {
+            val year = parts[0].toIntOrNull()
+            val month = parts[1].toIntOrNull()
+            val day = parts[2].toIntOrNull()
+            if (year != null && month != null && day != null) {
+                utc.clear()
+                utc.set(year, (month - 1).coerceIn(0, 11), day.coerceIn(1, 31), 0, 0, 0)
+                return utc.timeInMillis
+            }
+        }
+        return utc.timeInMillis
+    }
+
+    fun utcDatePickerMillisToIso(millis: Long): String {
+        val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
+            timeInMillis = millis
+        }
+        val year = utc.get(Calendar.YEAR)
+        val month = utc.get(Calendar.MONTH) + 1
+        val day = utc.get(Calendar.DAY_OF_MONTH)
+        return String.format(Locale.US, "%04d-%02d-%02d", year, month, day)
+    }
+
     fun addDays(dateIso: String, days: Int): String {
         val cal = parseIsoToCalendar(dateIso)
         cal.add(Calendar.DAY_OF_MONTH, days)
@@ -66,11 +93,10 @@ object DateTimeHelper {
 
     fun weekDaysFor(anchorIso: String): List<String> {
         val cal = parseIsoToCalendar(anchorIso)
-        // Shift to Monday as first day of week
         val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
         val diffFromMonday = if (dayOfWeek == Calendar.SUNDAY) -6 else Calendar.MONDAY - dayOfWeek
         cal.add(Calendar.DAY_OF_MONTH, diffFromMonday)
-        return (0..6).map { idx ->
+        return (0..6).map {
             val iso = calendarToIso(cal)
             cal.add(Calendar.DAY_OF_MONTH, 1)
             iso
@@ -150,6 +176,18 @@ object DateTimeHelper {
         return String.format(Locale.US, "%02d:%02d", h, m)
     }
 
+    fun formatMinuteDot(minuteOfDay: Int): String {
+        val clamped = minuteOfDay.coerceIn(0, 23 * 60 + 59)
+        val h = clamped / 60
+        val m = clamped % 60
+        return String.format(Locale.US, "%02d.%02d", h, m)
+    }
+
+    fun formatHourSlot(hour: Int): String {
+        val h = hour.coerceIn(0, 23)
+        return String.format(Locale.US, "%02d.00", h)
+    }
+
     fun formatTimeRange(startMin: Int, endMin: Int): String =
         "${formatMinuteOfDay(startMin)} - ${formatMinuteOfDay(endMin)}"
 
@@ -160,6 +198,17 @@ object DateTimeHelper {
         return when {
             h > 0 && m > 0 -> "${h}j ${m}m"
             h > 0 -> "${h} jam"
+            else -> "$m mnt"
+        }
+    }
+
+    fun formatTimelineDuration(minutes: Int): String {
+        val safe = minutes.coerceAtLeast(1)
+        val h = safe / 60
+        val m = safe % 60
+        return when {
+            h > 0 && m > 0 -> "$h jam $m mnt"
+            h > 0 -> "$h jam"
             else -> "$m mnt"
         }
     }

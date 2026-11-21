@@ -12,7 +12,6 @@ class JsonBackupManager(
     private val taskDao: ScheduleTaskDao,
     private val focusDao: FocusSessionDao,
     private val recapDao: PhotoRecapDao,
-    private val prefsManager: PreferencesManager,
     private val imageHelper: ImageStorageHelper,
 ) {
     suspend fun exportToUri(uri: Uri): Result<String> = withContext(Dispatchers.IO) {
@@ -20,19 +19,11 @@ class JsonBackupManager(
             val tasks = taskDao.getAllTasksOnce()
             val sessions = focusDao.getAllSessionsOnce()
             val recaps = recapDao.getAllRecapsOnce()
-            val prefs = prefsManager.getPreferencesOnce()
 
             val root = JSONObject().apply {
                 put("app", "JadwalNih")
-                put("version", 1)
+                put("version", 3)
                 put("exportedAtEpochMs", System.currentTimeMillis())
-                put(
-                    "preferences",
-                    JSONObject().apply {
-                        put("isDarkMode", prefs.isDarkMode)
-                        put("lastCustomFocusMinutes", prefs.lastCustomFocusMinutes)
-                    },
-                )
                 put(
                     "tasks",
                     JSONArray().apply {
@@ -53,6 +44,9 @@ class JsonBackupManager(
                                     put("reminderLeadMinutes", t.reminderLeadMinutes)
                                     put("completedAtEpochMs", t.completedAtEpochMs ?: JSONObject.NULL)
                                     put("createdAtEpochMs", t.createdAtEpochMs)
+                                    put("subtasks", JSONArray(t.subtasksJson))
+                                    put("attendanceStatusName", t.attendanceStatusName)
+                                    put("isSubtasksTodoMode", t.isSubtasksTodoMode)
                                 },
                             )
                         }
@@ -128,14 +122,16 @@ class JsonBackupManager(
                 val title = o.optString("title").trim()
                 val dateIso = o.optString("dateIso").trim()
                 if (title.isEmpty() || dateIso.isEmpty()) continue
+                val startMin = o.optInt("startMinuteOfDay", 9 * 60)
+                val endMin = o.optInt("endMinuteOfDay", 10 * 60)
                 parsedTasks.add(
                     ScheduleTaskEntity(
                         id = 0L,
                         title = title,
                         dateIso = dateIso,
-                        startMinuteOfDay = o.optInt("startMinuteOfDay", 9 * 60),
-                        endMinuteOfDay = o.optInt("endMinuteOfDay", 10 * 60),
-                        estimatedMinutes = o.optInt("estimatedMinutes", 60).coerceAtLeast(1),
+                        startMinuteOfDay = startMin,
+                        endMinuteOfDay = endMin,
+                        estimatedMinutes = (endMin - startMin).coerceAtLeast(o.optInt("estimatedMinutes", 60)).coerceAtLeast(1),
                         quadrantName = o.optString("quadrantName", "Q2_IMPORTANT_NOT_URGENT"),
                         isCompleted = o.optBoolean("isCompleted", false),
                         isFlexible = o.optBoolean("isFlexible", false),
@@ -144,6 +140,9 @@ class JsonBackupManager(
                         reminderLeadMinutes = o.optInt("reminderLeadMinutes", 10),
                         completedAtEpochMs = if (o.isNull("completedAtEpochMs")) null else o.optLong("completedAtEpochMs"),
                         createdAtEpochMs = o.optLong("createdAtEpochMs", System.currentTimeMillis()),
+                        subtasksJson = o.optJSONArray("subtasks")?.toString() ?: "[]",
+                        attendanceStatusName = o.optString("attendanceStatusName", "UNCONFIRMED"),
+                        isSubtasksTodoMode = o.optBoolean("isSubtasksTodoMode", false),
                     ),
                 )
             }
@@ -199,14 +198,6 @@ class JsonBackupManager(
             if (parsedTasks.isNotEmpty()) taskDao.insertTasks(parsedTasks)
             if (parsedSessions.isNotEmpty()) focusDao.insertSessions(parsedSessions)
             if (parsedRecaps.isNotEmpty()) recapDao.insertRecaps(parsedRecaps)
-
-            root.optJSONObject("preferences")?.let { p ->
-                if (p.has("isDarkMode")) prefsManager.setDarkMode(p.optBoolean("isDarkMode", false))
-                if (p.has("lastCustomFocusMinutes")) {
-                    prefsManager.setLastFocusMinutes(p.optInt("lastCustomFocusMinutes", 25))
-                }
-            }
-            prefsManager.setHasSeededInitialData(true)
 
             "Impor berhasil: ${parsedTasks.size} jadwal, ${parsedSessions.size} sesi fokus, dan ${parsedRecaps.size} rekap dimuat."
         }

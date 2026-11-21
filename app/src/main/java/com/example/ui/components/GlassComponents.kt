@@ -2,6 +2,7 @@ package com.example.ui.components
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -13,30 +14,33 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -51,88 +55,68 @@ fun AtmosphericBackground(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val atmo = LocalAtmospherePalette.current
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .drawBehind {
-                drawRect(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(atmo.bgTop, atmo.bgBottom),
-                    ),
-                )
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(atmo.orbBlue, Color.Transparent),
-                        center = Offset(size.width * 0.14f, size.height * 0.08f),
-                        radius = size.maxDimension * 0.55f,
-                    ),
-                    radius = size.maxDimension * 0.55f,
-                    center = Offset(size.width * 0.14f, size.height * 0.08f),
-                )
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(atmo.orbPurple, Color.Transparent),
-                        center = Offset(size.width * 0.88f, size.height * 0.24f),
-                        radius = size.maxDimension * 0.50f,
-                    ),
-                    radius = size.maxDimension * 0.50f,
-                    center = Offset(size.width * 0.88f, size.height * 0.24f),
-                )
-                drawCircle(
-                    brush = Brush.radialGradient(
-                        colors = listOf(atmo.orbBlue.copy(alpha = atmo.orbBlue.alpha * 0.65f), Color.Transparent),
-                        center = Offset(size.width * 0.5f, size.height * 0.92f),
-                        radius = size.maxDimension * 0.5f,
-                    ),
-                    radius = size.maxDimension * 0.5f,
-                    center = Offset(size.width * 0.5f, size.height * 0.92f),
-                )
-            },
-        content = content,
-    )
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
+        Box(
+            modifier = modifier
+                .fillMaxSize()
+                .background(atmo.bgTop),
+            content = content,
+        )
+    }
 }
 
 @Composable
 fun FrostedGlassCard(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 18.dp,
-    borderBrush: Brush? = null,
+    borderColor: Color? = null,
     onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
 ) {
     val atmo = LocalAtmospherePalette.current
     val shape = RoundedCornerShape(cornerRadius)
-    val effectiveBorder = borderBrush ?: Brush.linearGradient(
-        colors = listOf(atmo.glassBorderStart, atmo.glassBorderEnd),
-    )
+    val effectiveBorder = borderColor ?: atmo.cardBorder
+    val cardInteraction = remember { MutableInteractionSource() }
 
     Surface(
         modifier = modifier
+            .then(
+                if (onClick != null) {
+                    Modifier.bouncyPress(cardInteraction, pressedScale = 0.96f)
+                } else {
+                    Modifier
+                },
+            )
             .then(
                 if (atmo.isDark) {
                     Modifier
                 } else {
                     Modifier.shadow(
-                        elevation = 6.dp,
+                        elevation = 4.dp,
                         shape = shape,
-                        ambientColor = atmo.accentBlue.copy(alpha = 0.12f),
-                        spotColor = atmo.accentPurple.copy(alpha = 0.14f),
+                        ambientColor = Color.Black.copy(alpha = 0.06f),
+                        spotColor = Color.Black.copy(alpha = 0.08f),
                     )
                 },
             )
             .clip(shape)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = cardInteraction,
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                },
+            ),
         shape = shape,
-        color = Color.Transparent,
+        color = atmo.cardBg,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         border = BorderStroke(1.dp, effectiveBorder),
     ) {
-        Box(
-            modifier = Modifier.background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(atmo.glassFillTop, atmo.glassFillBottom),
-                ),
-            ),
-        ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
             content()
         }
     }
@@ -151,7 +135,9 @@ fun FloatingPillNavBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .windowInsetsPadding(WindowInsets.navigationBars)
+            .windowInsetsPadding(
+                WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
+            )
             .padding(horizontal = 14.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -159,19 +145,15 @@ fun FloatingPillNavBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(
-                    elevation = if (atmo.isDark) 18.dp else 14.dp,
+                    elevation = if (atmo.isDark) 14.dp else 10.dp,
                     shape = pillShape,
-                    ambientColor = atmo.accentPurple.copy(alpha = 0.25f),
-                    spotColor = atmo.accentBlue.copy(alpha = 0.3f),
+                    ambientColor = Color.Black.copy(alpha = 0.14f),
+                    spotColor = Color.Black.copy(alpha = 0.16f),
                 ),
             shape = pillShape,
             color = atmo.navBarFill,
-            border = BorderStroke(
-                width = 1.dp,
-                brush = Brush.linearGradient(
-                    colors = listOf(atmo.glassBorderStart, atmo.glassBorderEnd),
-                ),
-            ),
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            border = BorderStroke(1.dp, atmo.cardBorder),
         ) {
             Row(
                 modifier = Modifier
@@ -180,34 +162,48 @@ fun FloatingPillNavBar(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                val haptics = LocalHapticFeedback.current
                 MainTab.entries.forEach { tab ->
                     val selected = selectedTab == tab
+                    val (activeBg, activeFg) = atmo.tabAccent(tab)
+                    val interactionSource = remember { MutableInteractionSource() }
+                    val scale = rememberBouncyScale(interactionSource, pressedScale = 0.90f)
+                    val pillBg by animateColorAsState(
+                        targetValue = if (selected) activeBg else Color.Transparent,
+                        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                        label = "nav_bg_${tab.name}",
+                    )
                     val contentColor by animateColorAsState(
-                        targetValue = if (selected) atmo.heroOnPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        targetValue = if (selected) activeFg else MaterialTheme.colorScheme.onSurfaceVariant,
                         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
                         label = "nav_color_${tab.name}",
+                    )
+                    val iconPopScale by animateFloatAsState(
+                        targetValue = if (selected) 1.14f else 1.0f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium,
+                        ),
+                        label = "nav_icon_pop_${tab.name}",
                     )
 
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .minimumInteractiveComponentSize()
+                            .graphicsLayer {
+                                scaleX = scale
+                                scaleY = scale
+                            }
                             .clip(RoundedCornerShape(26.dp))
-                            .then(
-                                if (selected) {
-                                    Modifier.background(
-                                        brush = Brush.linearGradient(
-                                            colors = listOf(atmo.heroGradStart, atmo.heroGradEnd),
-                                        ),
-                                    )
-                                } else {
-                                    Modifier
-                                },
-                            )
+                            .background(pillBg)
                             .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
+                                interactionSource = interactionSource,
                                 indication = null,
-                                onClick = { onSelectTab(tab) },
+                                onClick = {
+                                    haptics.tapSoft()
+                                    onSelectTab(tab)
+                                },
                             )
                             .padding(vertical = 7.dp, horizontal = 2.dp)
                             .testTag("nav_tab_${tab.name.lowercase()}"),
@@ -221,7 +217,12 @@ fun FloatingPillNavBar(
                                 imageVector = tabIconProvider(tab, selected),
                                 contentDescription = tab.label,
                                 tint = contentColor,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .graphicsLayer {
+                                        scaleX = iconPopScale
+                                        scaleY = iconPopScale
+                                    },
                             )
                             Text(
                                 text = tab.label,

@@ -55,6 +55,18 @@ enum class TaskStatus(val labelId: String, val descriptionId: String) {
     OVERDUE_DARK("Terlewat", "Lewat batas waktu"),
 }
 
+enum class AttendanceStatus(val labelId: String) {
+    UNCONFIRMED("Belum Konfirmasi"),
+    CONFIRMED_ATTENDING("Sedang Ikut"),
+    NOT_YET("Belum Hadir"),
+    CONFIRMED_OVERRIDE("Hadir (Dikoreksi)"),
+}
+
+enum class QuickGlanceTarget(val labelId: String) {
+    ANALITIK("Analitik"),
+    MATRIKS("Matriks"),
+}
+
 enum class RecurrenceRule(val labelId: String) {
     NONE("Sekali"),
     DAILY("Harian"),
@@ -62,13 +74,37 @@ enum class RecurrenceRule(val labelId: String) {
     MONTHLY("Bulanan"),
 }
 
+data class SubTaskItem(
+    val id: String,
+    val title: String,
+    val isDone: Boolean = false,
+)
+
+data class ConflictInfo(
+    val conflictingTitles: List<String>,
+    val summaryText: String,
+)
+
+data class HeatmapDayCell(
+    val dateIso: String,
+    val completedCount: Int,
+    val focusMinutes: Int,
+    val level: Int,
+    val isFuture: Boolean = false,
+)
+
+data class GreetingState(
+    val greetingText: String,
+    val encouragementText: String,
+)
+
 data class ScheduleTask(
     val id: Long = 0L,
     val title: String,
     val dateIso: String,
     val startMinuteOfDay: Int,
     val endMinuteOfDay: Int,
-    val estimatedMinutes: Int,
+    val estimatedMinutes: Int = (endMinuteOfDay - startMinuteOfDay).coerceAtLeast(1),
     val quadrant: PriorityQuadrant,
     val isCompleted: Boolean = false,
     val isFlexible: Boolean = false,
@@ -77,12 +113,55 @@ data class ScheduleTask(
     val reminderLeadMinutes: Int = 10,
     val completedAtEpochMs: Long? = null,
     val createdAtEpochMs: Long = System.currentTimeMillis(),
+    val subtasks: List<SubTaskItem> = emptyList(),
+    val attendanceStatus: AttendanceStatus = AttendanceStatus.UNCONFIRMED,
+    val isSubtasksTodoMode: Boolean = false,
 )
 
 data class TaskWithStatus(
     val task: ScheduleTask,
     val status: TaskStatus,
 )
+
+data class TaskDraft(
+    val editingTaskId: Long? = null,
+    val title: String = "",
+    val dateIso: String = DateTimeHelper.todayIso(),
+    val startMinuteOfDay: Int = 9 * 60,
+    val endMinuteOfDay: Int = 10 * 60,
+    val quadrant: PriorityQuadrant = PriorityQuadrant.Q2_IMPORTANT_NOT_URGENT,
+    val isFlexible: Boolean = false,
+    val recurrence: RecurrenceRule = RecurrenceRule.NONE,
+    val reminderEnabled: Boolean = false,
+    val reminderLeadMinutes: Int = 10,
+    val subtasks: List<SubTaskItem> = emptyList(),
+    val isSubtasksTodoMode: Boolean = false,
+)
+
+data class UserPreferences(
+    val userName: String = "",
+    val isDarkMode: Boolean = false,
+    val quickGlanceTarget: QuickGlanceTarget = QuickGlanceTarget.ANALITIK,
+    val checkInNotificationsEnabled: Boolean = true,
+)
+
+sealed interface DailyTimelineEntry {
+    data class HourSlotEmpty(
+        val hour: Int,
+        val label: String,
+    ) : DailyTimelineEntry
+
+    data class TaskBlock(
+        val item: TaskWithStatus,
+        val durationMinutes: Int,
+    ) : DailyTimelineEntry
+
+    data class GapBreak(
+        val startMinuteOfDay: Int,
+        val endMinuteOfDay: Int,
+        val durationMinutes: Int,
+    ) : DailyTimelineEntry
+}
 
 data class FocusSession(
     val id: Long = 0L,
@@ -102,6 +181,18 @@ data class PhotoRecap(
     val imagePaths: List<String>,
     val updatedAtEpochMs: Long,
 )
+
+enum class PhotoTextAlignment(val label: String) {
+    LEFT("Kiri"),
+    CENTER("Tengah"),
+    RIGHT("Kanan"),
+}
+
+enum class PhotoTextStyle(val label: String) {
+    TIME_PILL("Kapsul Jam"),
+    CAPTION_BOTTOM("Judul & Jam"),
+    NONE("Polos"),
+}
 
 data class FocusTimerState(
     val customMinutesInput: String = "25",
@@ -126,6 +217,7 @@ data class QuickGlanceSummary(
     val nextTaskTitle: String? = null,
     val nextTaskTimeLabel: String? = null,
     val todayRecap: PhotoRecap? = null,
+    val streakDays: Int = 0,
 )
 
 data class DailyChartPoint(
@@ -145,4 +237,6 @@ data class AnalyticsSummary(
     val focusSessionsCount: Int = 0,
     val quadrantCounts: Map<PriorityQuadrant, Int> = emptyMap(),
     val trendPoints: List<DailyChartPoint> = emptyList(),
+    val streakDays: Int = 0,
+    val heatmapDays: List<HeatmapDayCell> = emptyList(),
 )
