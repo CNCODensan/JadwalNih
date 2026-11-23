@@ -22,44 +22,44 @@ enum class PriorityQuadrant(
 ) {
     Q1_IMPORTANT_URGENT(
         shortCode = "K1",
-        chipLabelId = "Kritis",
-        titleId = "Penting & Mendesak",
-        subtitleId = "Kerjain sekarang",
+        chipLabelId = "Penting Banget",
+        titleId = "Penting & Harus Segera",
+        subtitleId = "Penting, Mendesak",
     ),
     Q2_IMPORTANT_NOT_URGENT(
         shortCode = "K2",
         chipLabelId = "Penting",
-        titleId = "Penting & Terencana",
-        subtitleId = "Atur waktunya",
+        titleId = "Penting & Terjadwal",
+        subtitleId = "Penting, Kapan aja",
     ),
     Q3_NOT_IMPORTANT_URGENT(
         shortCode = "K3",
         chipLabelId = "Cepat",
-        titleId = "Kurang Penting & Mendesak",
-        subtitleId = "Ringkas / delegasi",
+        titleId = "Biasa Tapi Mendesak",
+        subtitleId = "Ga Penting/Biasa, Mendesak",
     ),
     Q4_NOT_IMPORTANT_NOT_URGENT(
         shortCode = "K4",
         chipLabelId = "Santai",
         titleId = "Santai / Opsional",
-        subtitleId = "Kapan sempat",
+        subtitleId = "Ga penting/Biasa, Kapan aja",
     ),
 }
 
 enum class TaskStatus(val labelId: String, val descriptionId: String) {
-    COMPLETED_GREEN("Selesai", "Sudah tuntas"),
-    CRITICAL_RED("Mepet Banget", "Tenggat kritis"),
-    APPROACHING_YELLOW("Mau Mepet", "Sebentar lagi"),
-    FLEXIBLE_BLUE("Fleksibel", "Waktu longgar"),
-    PENDING_GRAY("Belum Mulai", "Menunggu jadwal"),
-    OVERDUE_DARK("Terlewat", "Lewat batas waktu"),
+    COMPLETED_GREEN("Selesai", "Sudah beres"),
+    CRITICAL_RED("Mepet Banget", "Waktunya hampir habis"),
+    APPROACHING_YELLOW("Sebentar Lagi", "Mau mulai"),
+    FLEXIBLE_BLUE("Fleksibel", "Jamnya santai"),
+    PENDING_GRAY("Menunggu", "Belum mulai"),
+    OVERDUE_DARK("Terlewat", "Sudah lewat jamnya"),
 }
 
 enum class AttendanceStatus(val labelId: String) {
-    UNCONFIRMED("Belum Konfirmasi"),
-    CONFIRMED_ATTENDING("Sedang Ikut"),
-    NOT_YET("Belum Hadir"),
-    CONFIRMED_OVERRIDE("Hadir (Dikoreksi)"),
+    UNCONFIRMED("Belum Cek"),
+    CONFIRMED_ATTENDING("Lagi Ikut"),
+    NOT_YET("Belum Ikut"),
+    CONFIRMED_OVERRIDE("Sudah Ikut"),
 }
 
 enum class QuickGlanceTarget(val labelId: String) {
@@ -69,10 +69,216 @@ enum class QuickGlanceTarget(val labelId: String) {
 
 enum class RecurrenceRule(val labelId: String) {
     NONE("Sekali"),
-    DAILY("Harian"),
-    WEEKLY("Mingguan"),
-    MONTHLY("Bulanan"),
+    DAILY("Tiap Hari"),
+    WEEKLY("Tiap Minggu"),
+    MONTHLY("Tiap Bulan"),
 }
+
+enum class DurationCategory(val labelId: String) {
+    SHORT("Singkat"),
+    MEDIUM("Sedang"),
+    LONG("Panjang"),
+}
+
+enum class ThemeMode(val labelId: String) {
+    SYSTEM("Ikut HP"),
+    LIGHT("Terang"),
+    DARK("Gelap"),
+}
+
+enum class ReligionOption(
+    val labelId: String,
+    val shortHint: String,
+    val usesIslamicPrayerTimes: Boolean,
+) {
+    ISLAM("Islam", "5 waktu sholat harian", true),
+    KRISTEN("Kristen", "Doa pagi, malam & ibadah Minggu", false),
+    KATOLIK("Katolik", "Doa pagi, malam & Misa Minggu", false),
+    HINDU("Hindu", "Tri Sandhya & sembahyang mingguan", false),
+    BUDDHA("Buddha", "Puja pagi, malam & Kebaktian Vihara", false),
+    KONGHUCU("Konghucu", "Doa harian & sembahyang Klenteng", false),
+    LAINNYA("Lainnya", "Refleksi pagi, malam & ibadah mingguan", false);
+
+    companion object {
+        fun fromStoredName(raw: String?): ReligionOption {
+            return entries.firstOrNull { it.name == raw } ?: ISLAM
+        }
+    }
+}
+
+enum class HolidayThemeType(val labelId: String) {
+    NONE("Tema Normal"),
+    INDEPENDENCE_DAY("Kemerdekaan RI"),
+    IDUL_FITRI("Idul Fitri / Hari Besar Islam"),
+    IMLEK("Tahun Baru Imlek"),
+    NATAL("Hari Raya Natal"),
+    NYEPI_WAISAK("Nyepi / Waisak");
+
+    companion object {
+        fun fromStoredName(raw: String?): HolidayThemeType {
+            return entries.firstOrNull { it.name == raw } ?: NONE
+        }
+    }
+}
+
+enum class NotificationCategory(val labelId: String) {
+    ALL("Semua"),
+    DRAFT("Draf"),
+    TASK("Tugas"),
+    WORSHIP("Ibadah"),
+    HOLIDAY("Hari Raya"),
+}
+
+enum class AiConflictResolution {
+    OVERWRITE_EXISTING,
+    KEEP_EXISTING_SKIP_NEW,
+    KEEP_BOTH_CONFLICTING,
+}
+
+enum class WidgetQuadrantFilter(
+    val chipLabel: String,
+    val shortLabel: String,
+    val fullLabel: String,
+    val defaultQuickAddQuadrant: PriorityQuadrant,
+) {
+    FOCUS_K1_K2(
+        chipLabel = "Fokus",
+        shortLabel = "Fokus K1–K2",
+        fullLabel = "Fokus K1 & K2",
+        defaultQuickAddQuadrant = PriorityQuadrant.Q1_IMPORTANT_URGENT,
+    ),
+    K1_ONLY(
+        chipLabel = "K1",
+        shortLabel = "K1 Penting",
+        fullLabel = "K1 • Penting & Harus Segera",
+        defaultQuickAddQuadrant = PriorityQuadrant.Q1_IMPORTANT_URGENT,
+    ),
+    K2_ONLY(
+        chipLabel = "K2",
+        shortLabel = "K2 Terjadwal",
+        fullLabel = "K2 • Penting & Terjadwal",
+        defaultQuickAddQuadrant = PriorityQuadrant.Q2_IMPORTANT_NOT_URGENT,
+    ),
+    K3_ONLY(
+        chipLabel = "K3",
+        shortLabel = "K3 Cepat",
+        fullLabel = "K3 • Biasa Tapi Mendesak",
+        defaultQuickAddQuadrant = PriorityQuadrant.Q3_NOT_IMPORTANT_URGENT,
+    ),
+    K4_ONLY(
+        chipLabel = "K4",
+        shortLabel = "K4 Santai",
+        fullLabel = "K4 • Santai / Opsional",
+        defaultQuickAddQuadrant = PriorityQuadrant.Q4_NOT_IMPORTANT_NOT_URGENT,
+    ),
+    ALL(
+        chipLabel = "Semua",
+        shortLabel = "Semua K1–K4",
+        fullLabel = "Semua Prioritas",
+        defaultQuickAddQuadrant = PriorityQuadrant.Q1_IMPORTANT_URGENT,
+    );
+
+    fun next(): WidgetQuadrantFilter {
+        val list = entries
+        return list[(ordinal + 1) % list.size]
+    }
+
+    fun matches(quadrant: PriorityQuadrant): Boolean = when (this) {
+        FOCUS_K1_K2 -> quadrant == PriorityQuadrant.Q1_IMPORTANT_URGENT || quadrant == PriorityQuadrant.Q2_IMPORTANT_NOT_URGENT
+        K1_ONLY -> quadrant == PriorityQuadrant.Q1_IMPORTANT_URGENT
+        K2_ONLY -> quadrant == PriorityQuadrant.Q2_IMPORTANT_NOT_URGENT
+        K3_ONLY -> quadrant == PriorityQuadrant.Q3_NOT_IMPORTANT_URGENT
+        K4_ONLY -> quadrant == PriorityQuadrant.Q4_NOT_IMPORTANT_NOT_URGENT
+        ALL -> true
+    }
+
+    companion object {
+        fun fromStoredName(raw: String?): WidgetQuadrantFilter {
+            return entries.firstOrNull { it.name == raw } ?: FOCUS_K1_K2
+        }
+    }
+}
+
+data class WorshipScheduleItem(
+    val key: String,
+    val title: String,
+    val subtitle: String,
+    val minuteOfDay: Int,
+    val dateIso: String,
+    val isCompleted: Boolean = false,
+    val isWeeklySpecial: Boolean = false,
+) {
+    val formattedTime: String
+        get() = DateTimeHelper.formatMinuteOfDay(minuteOfDay)
+}
+
+data class WorshipAnalyticsSummary(
+    val religion: ReligionOption = ReligionOption.ISLAM,
+    val enabled: Boolean = true,
+    val completedThisWeek: Int = 0,
+    val expectedThisWeek: Int = 0,
+    val completedToday: Int = 0,
+    val totalToday: Int = 0,
+) {
+    val consistencyPercent: Int
+        get() = if (expectedThisWeek <= 0) 0 else ((completedThisWeek * 100f) / expectedThisWeek).toInt().coerceIn(0, 100)
+
+    val worshipEnabled: Boolean get() = enabled
+    val weeklyCompletionRatePercent: Int get() = consistencyPercent
+    val todayCompletedCount: Int get() = completedToday
+    val todayTotalCount: Int get() = totalToday
+    val weeklyCompletedCount: Int get() = completedThisWeek
+    val weeklyTotalCount: Int get() = expectedThisWeek
+}
+
+data class HolidayInfo(
+    val dateIso: String,
+    val name: String,
+    val isNationalHoliday: Boolean = true,
+    val isCutiBersama: Boolean = false,
+    val themeType: HolidayThemeType = HolidayThemeType.NONE,
+    val bannerGreeting: String = "",
+)
+
+data class NotificationLogEntry(
+    val id: Long = 0L,
+    val category: NotificationCategory,
+    val title: String,
+    val message: String,
+    val createdAtEpochMs: Long = System.currentTimeMillis(),
+    val isRead: Boolean = false,
+    val relatedTaskId: Long? = null,
+    val draftJson: String? = null,
+)
+
+data class ForeshadowOccurrence(
+    val parentTask: ScheduleTask,
+    val occurrenceDateIso: String,
+    val weekOffset: Int,
+) {
+    val weeksAhead: Int get() = weekOffset
+}
+
+data class WidgetPrioritySummary(
+    val todayDateIso: String = DateTimeHelper.todayIso(),
+    val filter: WidgetQuadrantFilter = WidgetQuadrantFilter.FOCUS_K1_K2,
+    val activeTasks: List<TaskWithStatus> = emptyList(),
+    val completedInFilterCount: Int = 0,
+    val totalTodayCount: Int = 0,
+    val totalTodayCompletedCount: Int = 0,
+    val nextWorship: WorshipScheduleItem? = null,
+    val worshipCountDownLabel: String = "",
+    val worshipEnabled: Boolean = false,
+)
+
+data class DurationProgressInfo(
+    val category: DurationCategory,
+    val totalMinutes: Int,
+    val isOngoing: Boolean = false,
+    val elapsedFraction: Float = 0f,
+    val remainingMinutes: Int = totalMinutes,
+    val statusLabel: String = DateTimeHelper.formatDuration(totalMinutes),
+)
 
 data class SubTaskItem(
     val id: String,
@@ -116,6 +322,12 @@ data class ScheduleTask(
     val subtasks: List<SubTaskItem> = emptyList(),
     val attendanceStatus: AttendanceStatus = AttendanceStatus.UNCONFIRMED,
     val isSubtasksTodoMode: Boolean = false,
+    val notes: String = "",
+    val iconKey: String = "",
+    val locationName: String = "",
+    val locationLat: Double? = null,
+    val locationLng: Double? = null,
+    val skippedOccurrenceDates: Set<String> = emptySet(),
 )
 
 data class TaskWithStatus(
@@ -136,13 +348,42 @@ data class TaskDraft(
     val reminderLeadMinutes: Int = 10,
     val subtasks: List<SubTaskItem> = emptyList(),
     val isSubtasksTodoMode: Boolean = false,
-)
+    val notes: String = "",
+    val aiRawText: String = "",
+    val isOtomatisMode: Boolean = true,
+    val iconKey: String = "",
+    val locationName: String = "",
+    val locationLat: Double? = null,
+    val locationLng: Double? = null,
+) {
+    fun hasMeaningfulContent(): Boolean {
+        return title.isNotBlank() ||
+            notes.isNotBlank() ||
+            subtasks.isNotEmpty() ||
+            aiRawText.isNotBlank() ||
+            locationName.isNotBlank()
+    }
+}
 
 data class UserPreferences(
     val userName: String = "",
-    val isDarkMode: Boolean = false,
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val quickGlanceTarget: QuickGlanceTarget = QuickGlanceTarget.ANALITIK,
     val checkInNotificationsEnabled: Boolean = true,
+    val isSimpleMode: Boolean = false,
+    val hasCompletedOnboarding: Boolean = false,
+    val skippedRescheduleDateIso: String = "",
+    val skippedRescheduleTaskIds: Set<Long> = emptySet(),
+    val religion: ReligionOption = ReligionOption.ISLAM,
+    val prayerReminderEnabled: Boolean = true,
+    val worshipNotificationSoundEnabled: Boolean = true,
+    val holidayThemeEnabled: Boolean = true,
+    val holidayThemePreview: HolidayThemeType = HolidayThemeType.NONE,
+    val hasSeenV1WelcomeCard: Boolean = false,
+    val hasPromptedInitialLocation: Boolean = false,
+    val lastLocationName: String = "",
+    val lastLatitude: Double? = null,
+    val lastLongitude: Double? = null,
 )
 
 sealed interface DailyTimelineEntry {
@@ -180,6 +421,9 @@ data class PhotoRecap(
     val caption: String,
     val imagePaths: List<String>,
     val updatedAtEpochMs: Long,
+    val locationName: String = "",
+    val locationLat: Double? = null,
+    val locationLng: Double? = null,
 )
 
 enum class PhotoTextAlignment(val label: String) {
@@ -239,4 +483,5 @@ data class AnalyticsSummary(
     val trendPoints: List<DailyChartPoint> = emptyList(),
     val streakDays: Int = 0,
     val heatmapDays: List<HeatmapDayCell> = emptyList(),
+    val worshipSummary: WorshipAnalyticsSummary = WorshipAnalyticsSummary(),
 )

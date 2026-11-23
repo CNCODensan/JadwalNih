@@ -9,6 +9,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.unit.dp
+import com.example.domain.HolidayThemeType
 
 private val LightColors = lightColorScheme(
     primary = LightPrimary,
@@ -61,24 +62,29 @@ private val DarkColors = darkColorScheme(
 )
 
 private val JadwalNihShapes = Shapes(
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(18.dp),
-    large = RoundedCornerShape(24.dp),
-    extraLarge = RoundedCornerShape(30.dp),
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(22.dp),
+    large = RoundedCornerShape(28.dp),
+    extraLarge = RoundedCornerShape(34.dp),
 )
 
 @Composable
 fun JadwalNihTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
+    holidayThemeType: HolidayThemeType = HolidayThemeType.NONE,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = if (darkTheme) DarkColors else LightColors
+    val baseColorScheme = if (darkTheme) DarkColors else LightColors
+    val colorScheme = applyHolidayColorScheme(baseColorScheme, holidayThemeType, darkTheme)
     val statusPalette = if (darkTheme) DarkStatusPalette else LightStatusPalette
-    val atmospherePalette = if (darkTheme) DarkAtmospherePalette else LightAtmospherePalette
+    val baseAtmosphere = if (darkTheme) DarkAtmospherePalette else LightAtmospherePalette
+    val atmospherePalette = applyHolidayAtmosphere(baseAtmosphere, holidayThemeType)
 
     CompositionLocalProvider(
         LocalStatusPalette provides statusPalette,
         LocalAtmospherePalette provides atmospherePalette,
+        LocalHolidayThemeType provides holidayThemeType,
     ) {
         MaterialTheme(
             colorScheme = colorScheme,

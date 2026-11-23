@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.Icon
@@ -60,8 +61,10 @@ import androidx.compose.ui.unit.dp
 import com.example.R
 import com.example.domain.DateTimeHelper
 import com.example.domain.GreetingState
+import com.example.domain.HolidayThemeType
 import com.example.domain.QuickGlanceSummary
 import com.example.domain.QuickGlanceTarget
+import com.example.ui.theme.HolidayHeaderOrnament
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.MonoSmallStyle
 
@@ -69,10 +72,14 @@ import com.example.ui.theme.MonoSmallStyle
 fun JadwalNihTopBar(
     onOpenSettings: () -> Unit,
     modifier: Modifier = Modifier,
+    holidayThemeType: HolidayThemeType = HolidayThemeType.NONE,
+    unreadNotificationCount: Int = 0,
+    onOpenNotifications: () -> Unit = {},
 ) {
     val atmo = LocalAtmospherePalette.current
     val haptics = LocalHapticFeedback.current
     val settingsInteraction = remember { MutableInteractionSource() }
+    val notifInteraction = remember { MutableInteractionSource() }
 
     Row(
         modifier = modifier
@@ -87,51 +94,109 @@ fun JadwalNihTopBar(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.weight(1f),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.app_brand_icon),
                 contentDescription = "Ikon JadwalNih",
                 modifier = Modifier
                     .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp)),
+                    .clip(RoundedCornerShape(14.dp)),
             )
             Column {
-                Text(
-                    text = "JadwalNih",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = "JadwalNih",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    HolidayHeaderOrnament(themeType = holidayThemeType)
+                }
                 Text(
                     text = DateTimeHelper.formatIndonesianFullDate(DateTimeHelper.todayIso()),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }
 
-        Surface(
-            shape = CircleShape,
-            color = atmo.cardBg,
-            contentColor = MaterialTheme.colorScheme.onSurface,
-            border = BorderStroke(1.dp, atmo.cardBorder),
-            modifier = Modifier.bouncyPress(settingsInteraction, pressedScale = 0.86f),
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            BouncyIconButton(
-                onClick = {
-                    haptics.tapSoft()
-                    onOpenSettings()
-                },
-                interactionSource = settingsInteraction,
-                pressedScale = 1f,
-                modifier = Modifier
-                    .minimumInteractiveComponentSize()
-                    .testTag("settings_button"),
+            Box {
+                Surface(
+                    shape = CircleShape,
+                    color = atmo.cardBg,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    border = BorderStroke(1.dp, atmo.cardBorder),
+                    modifier = Modifier.bouncyPress(notifInteraction, pressedScale = 0.86f),
+                ) {
+                    BouncyIconButton(
+                        onClick = {
+                            haptics.tapSoft()
+                            onOpenNotifications()
+                        },
+                        interactionSource = notifInteraction,
+                        pressedScale = 1f,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("notification_bell_button"),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Notifications,
+                            contentDescription = "Buka Pusat Notifikasi",
+                            tint = atmo.accentCobalt,
+                        )
+                    }
+                }
+                if (unreadNotificationCount > 0) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
+                        shape = CircleShape,
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .testTag("notification_unread_badge"),
+                    ) {
+                        Text(
+                            text = if (unreadNotificationCount > 99) "99+" else unreadNotificationCount.toString(),
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                        )
+                    }
+                }
+            }
+
+            Surface(
+                shape = CircleShape,
+                color = atmo.cardBg,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                border = BorderStroke(1.dp, atmo.cardBorder),
+                modifier = Modifier.bouncyPress(settingsInteraction, pressedScale = 0.86f),
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = "Buka Pengaturan",
-                    tint = atmo.accentCobalt,
-                )
+                BouncyIconButton(
+                    onClick = {
+                        haptics.tapSoft()
+                        onOpenSettings()
+                    },
+                    interactionSource = settingsInteraction,
+                    pressedScale = 1f,
+                    modifier = Modifier
+                        .minimumInteractiveComponentSize()
+                        .testTag("settings_button"),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Settings,
+                        contentDescription = "Buka Pengaturan",
+                        tint = atmo.accentCobalt,
+                    )
+                }
             }
         }
     }
@@ -145,10 +210,11 @@ fun RingkasanCepatCard(
     tapTarget: QuickGlanceTarget,
     onCardClick: () -> Unit,
     modifier: Modifier = Modifier,
+    isSimpleMode: Boolean = false,
 ) {
     val atmo = LocalAtmospherePalette.current
     val haptics = LocalHapticFeedback.current
-    val shape = RoundedCornerShape(22.dp)
+    val shape = RoundedCornerShape(26.dp)
     val rawFraction = if (summary.todayTotalCount == 0) {
         0f
     } else {
@@ -181,6 +247,7 @@ fun RingkasanCepatCard(
             )
             .clip(shape)
             .clickable(
+                enabled = !isSimpleMode,
                 interactionSource = cardInteraction,
                 indication = null,
             ) {
@@ -376,22 +443,36 @@ fun RingkasanCepatCard(
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = "Ketuk untuk buka ${tapTarget.labelId}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.82f),
-                )
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = Color.White.copy(alpha = 0.82f),
-                    modifier = Modifier.size(15.dp),
-                )
+            if (!isSimpleMode) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Ketuk untuk buka ${tapTarget.labelId}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.82f),
+                    )
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.82f),
+                        modifier = Modifier.size(15.dp),
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "Mode Simpel • Ringkas & Nyaman",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.78f),
+                    )
+                }
             }
         }
     }

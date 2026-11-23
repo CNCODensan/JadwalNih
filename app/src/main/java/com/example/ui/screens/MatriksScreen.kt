@@ -556,8 +556,8 @@ private fun TimelineGapRow(
             .padding(start = 76.dp),
     ) {
         Surface(
-            color = if (atmo.isDark) Color(0xFF332018) else Color(0xFFFFF1E6),
-            shape = RoundedCornerShape(14.dp),
+            color = atmo.warmTintBg,
+            shape = RoundedCornerShape(18.dp),
             border = BorderStroke(1.dp, atmo.accentOrange.copy(alpha = 0.32f)),
             modifier = Modifier.fillMaxWidth(),
         ) {

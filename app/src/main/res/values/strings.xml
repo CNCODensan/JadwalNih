@@ -9,4 +9,10 @@
     <string name="notification_channel_desc">Notifikasi pengingat kegiatan, konfirmasi kehadiran, dan jadwal berulang JadwalNih</string>
     <string name="settings_title">Pengaturan</string>
     <string name="export_collage_label">Ekspor Kolase</string>
+    <string name="widget_priority_label">Prioritas Kuadran</string>
+    <string name="widget_priority_description">Pantau tugas prioritas kuadran hari ini, centang selesai, dan tambah jadwal cepat dari layar utama.</string>
+    <string name="notification_worship_sound_name">Pengingat Ibadah (Bersuara)</string>
+    <string name="notification_worship_sound_desc">Pengingat waktu sholat dan ibadah dengan suara notifikasi lembut</string>
+    <string name="notification_worship_silent_name">Pengingat Ibadah (Senyap)</string>
+    <string name="notification_worship_silent_desc">Pengingat waktu sholat dan ibadah tanpa suara agar tetap fokus</string>
 </resources>

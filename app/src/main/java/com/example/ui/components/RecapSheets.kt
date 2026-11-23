@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FormatAlignCenter
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
@@ -128,7 +129,7 @@ fun PostCapturePreviewSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
         containerColor = atmo.sheetBg,
         contentColor = MaterialTheme.colorScheme.onSurface,
         scrimColor = atmo.sheetScrim,
@@ -333,7 +334,7 @@ fun PostCapturePreviewSheet(
                 value = titleInput,
                 onValueChange = { titleInput = it },
                 label = { Text("Judul Singkat (Opsional)") },
-                placeholder = { Text("Misal: Kopi & belajar sore") },
+                placeholder = { Text("Tulis judul singkat momen (opsional)") },
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -344,7 +345,7 @@ fun PostCapturePreviewSheet(
                 value = captionInput,
                 onValueChange = { captionInput = it },
                 label = { Text("Catatan Singkat (Opsional)") },
-                placeholder = { Text("Cerita singkat momen ini...") },
+                placeholder = { Text("Tulis catatan singkat untuk foto ini...") },
                 maxLines = 2,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -418,6 +419,7 @@ fun RecapCalendarSheet(
     var visibleMonthAnchor by remember(selectedDateIso) { mutableStateOf(selectedDateIso) }
     var zoomedImagePath by remember { mutableStateOf<String?>(null) }
     var pendingDeleteDate by remember { mutableStateOf<String?>(null) }
+    var pendingRemovePhotoPath by remember { mutableStateOf<String?>(null) }
 
     val activeRecap = photoRecaps[selectedDateIso]
     val photos = activeRecap?.imagePaths.orEmpty()
@@ -513,10 +515,22 @@ fun RecapCalendarSheet(
         )
     }
 
+    pendingRemovePhotoPath?.let { pathToRemove ->
+        ConfirmDeleteDialog(
+            title = "Hapus foto ini?",
+            message = "Foto akan dihapus dari rekap tanggal ${DateTimeHelper.formatShortDate(selectedDateIso)}.",
+            onConfirm = {
+                onRemovePhoto(selectedDateIso, pathToRemove)
+                pendingRemovePhotoPath = null
+            },
+            onDismiss = { pendingRemovePhotoPath = null },
+        )
+    }
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        shape = RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp),
         containerColor = atmo.sheetBg,
         contentColor = MaterialTheme.colorScheme.onSurface,
         scrimColor = atmo.sheetScrim,
@@ -714,8 +728,9 @@ fun RecapCalendarSheet(
                                             val count = recap?.imagePaths?.size ?: 0
                                             if (count > 1) {
                                                 Surface(
-                                                    color = atmo.accentCobalt,
+                                                    color = if (atmo.isDark) Color(0xFF1E293B) else atmo.accentCobalt,
                                                     shape = RoundedCornerShape(6.dp),
+                                                    border = if (atmo.isDark) BorderStroke(1.dp, Color(0xFF475569)) else null,
                                                     modifier = Modifier
                                                         .align(Alignment.BottomEnd)
                                                         .padding(4.dp),
@@ -723,7 +738,7 @@ fun RecapCalendarSheet(
                                                     Text(
                                                         text = "$count/4",
                                                         style = MaterialTheme.typography.labelSmall,
-                                                        color = atmo.onAccentCobalt,
+                                                        color = if (atmo.isDark) Color(0xFFE2E8F0) else atmo.onAccentCobalt,
                                                         modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
                                                     )
                                                 }
@@ -809,6 +824,29 @@ fun RecapCalendarSheet(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                            if (activeRecap?.locationName?.isNotBlank() == true) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier
+                                        .padding(top = 2.dp)
+                                        .testTag("recap_detail_location_badge"),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.LocationOn,
+                                        contentDescription = "Lokasi pengambilan foto",
+                                        tint = atmo.accentMint,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Text(
+                                        text = activeRecap.locationName,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = atmo.accentMint,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
                         }
 
                         if (photos.size < 4) {
@@ -862,7 +900,7 @@ fun RecapCalendarSheet(
                         AutoPhotoCollage(
                             paths = photos,
                             onZoom = { zoomedImagePath = it },
-                            onRemove = { onRemovePhoto(selectedDateIso, it) },
+                            onRemove = { pendingRemovePhotoPath = it },
                         )
 
                         BouncyOutlinedButton(
@@ -1015,20 +1053,20 @@ private fun SpiralNotebookCard(
     modifier: Modifier = Modifier,
 ) {
     val atmo = LocalAtmospherePalette.current
-    val isDark = atmo.isDark
 
-    val headerBgColor = if (isDark) Color(0xFF28334E) else Color(0xFFE0ECFF)
-    val pageBgColor = if (isDark) Color(0xFF1F273B) else Color(0xFFF6FAFF)
-    val lipBgColor = if (isDark) Color(0xFF161D2E) else Color(0xFFD6E4FF)
-    val borderColor = if (isDark) Color(0xFF4F6089) else Color(0xFFB3CDFF)
-    val ruledLineColor = if (isDark) Color(0x3860A5FA) else Color(0x381677FF)
-    val badgeBgColor = if (isDark) atmo.accentAmber else atmo.accentCobalt
-    val badgeFgColor = if (isDark) atmo.onAccentAmber else Color.White
-    val ringColor = if (isDark) Color(0xFF93C5FD) else Color(0xFF1677FF)
-    val ringSheenColor = if (isDark) Color(0xFFDBEAFE) else Color(0xFFEFF6FF)
-    val textColor = if (isDark) Color(0xFFF8FAFC) else Color(0xFF111827)
-    val hintColor = if (isDark) Color(0xFF94A3B8) else Color(0xFF64748B)
-    val holeBgColor = if (isDark) Color(0xFF0E121B) else Color(0xFFCBD5E1)
+    val headerBgColor = atmo.notebookHeaderBg
+    val pageBgColor = atmo.notebookPageBg
+    val lipBgColor = atmo.notebookLipBg
+    val borderColor = atmo.notebookBorder
+    val ruledLineColor = atmo.notebookRuledLine
+    val badgeBgColor = atmo.notebookBadgeBg
+    val badgeFgColor = atmo.notebookBadgeFg
+    val badgeBorderColor = atmo.notebookBadgeBorder
+    val ringColor = atmo.notebookRing
+    val ringSheenColor = atmo.notebookRingSheen
+    val textColor = MaterialTheme.colorScheme.onSurface
+    val hintColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val holeBgColor = atmo.notebookHoleBg
 
     var captionTextLayout by remember { mutableStateOf<TextLayoutResult?>(null) }
 
@@ -1042,9 +1080,9 @@ private fun SpiralNotebookCard(
             modifier = Modifier
                 .matchParentSize()
                 .padding(top = 14.dp, start = 4.dp, end = 4.dp)
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(22.dp))
                 .background(lipBgColor)
-                .border(1.dp, borderColor.copy(alpha = 0.65f), RoundedCornerShape(18.dp)),
+                .border(1.dp, borderColor.copy(alpha = 0.65f), RoundedCornerShape(22.dp)),
         )
 
         // Main solid pastel notebook rectangle (no gradient)
@@ -1052,12 +1090,12 @@ private fun SpiralNotebookCard(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(bottom = 5.dp)
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(22.dp))
                 .background(pageBgColor)
                 .border(
                     width = 1.2.dp,
                     color = borderColor,
-                    shape = RoundedCornerShape(18.dp),
+                    shape = RoundedCornerShape(22.dp),
                 ),
         ) {
             // Tinted notebook header band (with top clearance for spiral punch holes) for short title
@@ -1071,6 +1109,8 @@ private fun SpiralNotebookCard(
                 Surface(
                     color = badgeBgColor,
                     shape = RoundedCornerShape(999.dp),
+                    border = BorderStroke(1.dp, badgeBorderColor),
+                    modifier = Modifier.testTag("recap_notebook_title_badge"),
                 ) {
                     Text(
                         text = "JUDUL CATATAN",

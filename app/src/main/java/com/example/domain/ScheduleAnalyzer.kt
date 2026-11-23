@@ -210,6 +210,29 @@ object ScheduleAnalyzer {
         return streak
     }
 
+    fun computeWorshipAnalytics(
+        religion: ReligionOption,
+        enabled: Boolean,
+        todayIso: String,
+        completedDateItemKeys: Set<String>,
+        todayWorshipItems: List<WorshipScheduleItem>,
+    ): WorshipAnalyticsSummary {
+        val weekDays = DateTimeHelper.weekDaysFor(todayIso).toSet()
+        val completedThisWeek = completedDateItemKeys.count { composite ->
+            val datePart = composite.substringBefore("|")
+            datePart in weekDays
+        }
+        val expected = PrayerTimesService.computeExpectedWeeklyWorshipCount(religion)
+        return WorshipAnalyticsSummary(
+            religion = religion,
+            enabled = enabled,
+            completedThisWeek = completedThisWeek,
+            expectedThisWeek = expected,
+            completedToday = todayWorshipItems.count { it.isCompleted },
+            totalToday = todayWorshipItems.size,
+        )
+    }
+
     fun buildGreeting(
         userName: String = "",
         hourOfDay: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
@@ -219,22 +242,66 @@ object ScheduleAnalyzer {
     ): GreetingState {
         val trimmedName = userName.trim()
         val greeting = when (hourOfDay) {
-            in 4..10 -> if (trimmedName.isNotEmpty()) "Pagi, $trimmedName!" else "Pagi! Siap taklukin hari ini?"
-            in 11..14 -> if (trimmedName.isNotEmpty()) "Siang, $trimmedName!" else "Siang! Napas bentar, lanjut lagi"
-            in 15..17 -> if (trimmedName.isNotEmpty()) "Sore, $trimmedName!" else "Sore! Dikit lagi tuntas semua"
+            in 4..10 -> if (trimmedName.isNotEmpty()) "Pagi, $trimmedName!" else "Pagi! Siap jalani hari ini?"
+            in 11..14 -> if (trimmedName.isNotEmpty()) "Siang, $trimmedName!" else "Siang! Istirahat sebentar, lanjut lagi"
+            in 15..17 -> if (trimmedName.isNotEmpty()) "Sore, $trimmedName!" else "Sore! Sedikit lagi beres semua"
             else -> if (trimmedName.isNotEmpty()) "Malam, $trimmedName!" else "Malam! Waktunya rekap santai"
         }
 
         val encouragement = when {
-            todayTotal == 0 -> "Belum ada agenda hari ini. Tambah 1 tugas ringan yuk!"
-            todayCompleted >= todayTotal -> "Keren banget! Semua agenda hari ini tuntas 100%."
-            todayCompleted * 2 >= todayTotal -> "Udah lewat setengah jalan, gas dikit lagi!"
-            streakDays >= 2 -> "Streak $streakDays hari lagi jalan—pertahanin ritmemu!"
-            else -> "Mulai dari satu tugas paling ringan biar langsung jalan."
+            todayTotal == 0 -> "Belum ada jadwal hari ini. Tambah 1 kegiatan ringan yuk!"
+            todayCompleted >= todayTotal -> "Keren! Semua jadwal hari ini selesai 100%."
+            todayCompleted * 2 >= todayTotal -> "Udah lewat setengah jalan, lanjut dikit lagi!"
+            streakDays >= 2 -> "Streak $streakDays hari lagi jalan—pertahanin ya!"
+            else -> "Mulai dari satu kegiatan paling ringan biar langsung jalan."
         }
         return GreetingState(
             greetingText = greeting,
             encouragementText = encouragement,
+        )
+    }
+
+    fun buildWidgetPrioritySummary(
+        tasks: List<ScheduleTask>,
+        filter: WidgetQuadrantFilter,
+        todayIso: String = DateTimeHelper.todayIso(),
+        nowMinuteOfDay: Int = DateTimeHelper.nowMinuteOfDay(),
+        nextWorship: WorshipScheduleItem? = null,
+        worshipCountDownLabel: String = "",
+        worshipEnabled: Boolean = false,
+    ): WidgetPrioritySummary {
+        val todayTasks = tasks
+            .filter { it.dateIso == todayIso }
+            .map { task ->
+                TaskWithStatus(
+                    task = task,
+                    status = StatusEvaluator.evaluate(task, todayIso, nowMinuteOfDay),
+                )
+            }
+
+        val matching = todayTasks.filter { filter.matches(it.task.quadrant) }
+        val activeTasks = matching
+            .filterNot { it.status == TaskStatus.COMPLETED_GREEN }
+            .sortedWith(
+                compareBy<TaskWithStatus>(
+                    { it.task.quadrant.ordinal },
+                    { it.task.startMinuteOfDay },
+                    { it.task.id },
+                ),
+            )
+        val completedInFilterCount = matching.count { it.status == TaskStatus.COMPLETED_GREEN }
+        val totalTodayCompletedCount = todayTasks.count { it.status == TaskStatus.COMPLETED_GREEN }
+
+        return WidgetPrioritySummary(
+            todayDateIso = todayIso,
+            filter = filter,
+            activeTasks = activeTasks,
+            completedInFilterCount = completedInFilterCount,
+            totalTodayCount = todayTasks.size,
+            totalTodayCompletedCount = totalTodayCompletedCount,
+            nextWorship = nextWorship,
+            worshipCountDownLabel = worshipCountDownLabel,
+            worshipEnabled = worshipEnabled,
         )
     }
 }

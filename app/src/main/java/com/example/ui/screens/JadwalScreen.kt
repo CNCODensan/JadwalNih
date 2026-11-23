@@ -13,7 +13,10 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -44,6 +47,8 @@ import androidx.compose.material.icons.outlined.EventAvailable
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -55,7 +60,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,31 +76,42 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.domain.DateTimeHelper
+import com.example.domain.ForeshadowOccurrence
+import com.example.domain.HolidayThemeType
 import com.example.domain.PhotoRecap
 import com.example.domain.ScheduleScope
 import com.example.domain.ScheduleTask
 import com.example.domain.TaskDraft
 import com.example.domain.TaskStatus
 import com.example.domain.TaskWithStatus
+import com.example.domain.WorshipScheduleItem
 import com.example.ui.JadwalNihUiState
 import com.example.ui.components.BouncyButton
 import com.example.ui.components.BouncyFilterChip
 import com.example.ui.components.BouncyIconButton
 import com.example.ui.components.BouncyOutlinedButton
 import com.example.ui.components.BouncyTextButton
+import com.example.ui.components.ConfirmDeleteDialog
+import com.example.ui.components.ForeshadowActionSheet
+import com.example.ui.components.ForeshadowGhostCard
 import com.example.ui.components.FrostedGlassCard
+import com.example.ui.components.HolidayGreetingBanner
 import com.example.ui.components.RingkasanCepatCard
 import com.example.ui.components.ScheduleTaskCard
 import com.example.ui.components.StaggeredEntrance
+import com.example.ui.components.V1WelcomeCard
+import com.example.ui.components.WorshipScheduleCard
 import com.example.ui.components.bouncyPress
 import com.example.ui.components.colorsFor
 import com.example.ui.components.tapConfirm
 import com.example.ui.components.tapSoft
 import com.example.ui.components.tapTick
+import com.example.ui.theme.HolidayScheduleWatermarkOverlay
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.LocalStatusPalette
 import com.example.ui.theme.MonoSmallStyle
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun JadwalScreen(
     state: JadwalNihUiState,
@@ -113,50 +131,135 @@ fun JadwalScreen(
     onDiscardDraft: () -> Unit,
     onConfirmAttendance: (ScheduleTask, Boolean) -> Unit,
     onOverrideAttended: (ScheduleTask) -> Unit,
+    onRescheduleYesterday: (Set<Long>) -> Unit = {},
+    onSkipYesterday: (Set<Long>) -> Unit = {},
     onOpenFocusTab: () -> Unit,
     onOpenRecapTab: () -> Unit,
     onOpenMatrixTab: () -> Unit,
     onOpenAnalyticsTab: () -> Unit,
     modifier: Modifier = Modifier,
+    onDeleteRecurringSeries: (ScheduleTask) -> Unit = { onDeleteTask(it) },
+    onDismissWelcomeCard: () -> Unit = {},
+    onToggleWorshipComplete: (WorshipScheduleItem) -> Unit = {},
+    onActivateForeshadowEarly: (ForeshadowOccurrence) -> Unit = {},
+    onSkipForeshadow: (ForeshadowOccurrence) -> Unit = {},
 ) {
-    val todayIso = DateTimeHelper.todayIso()
+    val todayIso = state.currentDateIso.ifBlank { DateTimeHelper.todayIso() }
     val statusPalette = LocalStatusPalette.current
     val atmo = LocalAtmospherePalette.current
     val haptics = LocalHapticFeedback.current
 
-    LazyColumn(
-        modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+    var pendingConfirmDiscardDraft by remember { mutableStateOf(false) }
+    var selectedForeshadow by remember { mutableStateOf<ForeshadowOccurrence?>(null) }
+
+    if (pendingConfirmDiscardDraft) {
+        ConfirmDeleteDialog(
+            title = "Hapus Draf Jadwal?",
+            message = "Draf yang belum disimpan bakal dihapus permanen. Yakin mau lanjut hapus?",
+            confirmLabel = "Hapus Draf",
+            onConfirm = {
+                pendingConfirmDiscardDraft = false
+                onDiscardDraft()
+            },
+            onDismiss = { pendingConfirmDiscardDraft = false },
+        )
+    }
+
+    selectedForeshadow?.let { occurrence ->
+        ForeshadowActionSheet(
+            occurrence = occurrence,
+            onActivateEarly = {
+                selectedForeshadow = null
+                onActivateForeshadowEarly(occurrence)
+            },
+            onSkipWeek = {
+                selectedForeshadow = null
+                onSkipForeshadow(occurrence)
+            },
+            onDismiss = { selectedForeshadow = null },
+        )
+    }
+
+    val weekDaysSet = remember(state.selectedDateIso) {
+        DateTimeHelper.weekDaysFor(state.selectedDateIso).toSet()
+    }
+    val visibleForeshadows = remember(
+        state.foreshadowOccurrences,
+        state.selectedScope,
+        state.selectedDateIso,
+        weekDaysSet,
+        state.filteredScheduleTasks,
     ) {
-        // 1. Info-only Quick Glance Hero Card (tappable to jump to Analitik / Matriks)
+        val existingSignatures = state.filteredScheduleTasks.map {
+            "${it.task.dateIso}|${it.task.title.trim().lowercase()}|${it.task.startMinuteOfDay}"
+        }.toSet()
+        state.foreshadowOccurrences.filter { occ ->
+            val inScope = when (state.selectedScope) {
+                ScheduleScope.DAILY -> occ.occurrenceDateIso == state.selectedDateIso
+                ScheduleScope.WEEKLY -> occ.occurrenceDateIso in weekDaysSet
+                ScheduleScope.MONTHLY -> occ.occurrenceDateIso.startsWith(state.selectedDateIso.take(7))
+            }
+            val sig = "${occ.occurrenceDateIso}|${occ.parentTask.title.trim().lowercase()}|${occ.parentTask.startMinuteOfDay}"
+            inScope && sig !in existingSignatures
+        }
+    }
+
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val horizontalPad = if (maxWidth < 360.dp) 10.dp else 16.dp
+
+        Box(modifier = Modifier.fillMaxSize()) {
+            HolidayScheduleWatermarkOverlay(themeType = state.activeHolidayTheme)
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = horizontalPad, end = horizontalPad, top = 4.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+        // 1. Info-only Quick Glance Hero Card (tappable to jump to Analitik / Matriks in Normal Mode)
         item(key = "quick_glance") {
             RingkasanCepatCard(
                 summary = state.quickGlance,
                 greeting = state.greeting,
                 tapTarget = state.quickGlanceTarget,
+                isSimpleMode = state.isSimpleMode,
                 onCardClick = onQuickGlanceClick,
             )
         }
 
-        // 2. Draft Recovery Banner (if user accidentally closed TaskEditorSheet)
-        val draft = state.taskDraft
+        // 1b. v1.0 Welcome Card (shown once for new onboarded users, easily dismissible)
+        if (state.hasCompletedOnboarding && !state.hasSeenV1WelcomeCard) {
+            item(key = "v1_welcome_card") {
+                V1WelcomeCard(onDismiss = onDismissWelcomeCard)
+            }
+        }
+
+        // 1c. Public Holiday Greeting Banner (on Hari H or when theme preview active)
+        val activeHoliday = state.todayHoliday ?: state.selectedDateHoliday
+        if (state.activeHolidayTheme != HolidayThemeType.NONE || activeHoliday != null) {
+            item(key = "holiday_greeting_banner") {
+                HolidayGreetingBanner(
+                    holiday = activeHoliday,
+                    themeType = state.activeHolidayTheme,
+                )
+            }
+        }
+
+        // 2. Draft Recovery Banner (if user closed TaskEditorSheet with unsaved draft)
+        val draft = state.taskDraft?.takeIf { it.hasMeaningfulContent() }
         if (draft != null) {
             item(key = "draft_recovery_banner") {
                 FrostedGlassCard(
-                    cornerRadius = 16.dp,
+                    cornerRadius = 22.dp,
                     borderColor = atmo.accentCobalt.copy(alpha = 0.55f),
                     modifier = Modifier.testTag("draft_recovery_banner"),
                 ) {
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Row(
-                            modifier = Modifier.weight(1f),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
@@ -168,7 +271,7 @@ fun JadwalScreen(
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         imageVector = Icons.Filled.EditNote,
-                                        contentDescription = "Draft jadwal",
+                                        contentDescription = "Draf jadwal belum disimpan",
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(18.dp),
                                     )
@@ -176,16 +279,20 @@ fun JadwalScreen(
                             }
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Draft Jadwal Tersimpan",
+                                    text = "Draf jadwal belum disimpan. Mau lanjut edit atau hapus draf?",
                                     style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
                                     color = MaterialTheme.colorScheme.onSurface,
                                 )
+                                val previewText = when {
+                                    draft.title.isNotBlank() -> draft.title
+                                    draft.aiRawText.isNotBlank() -> draft.aiRawText.trim()
+                                    draft.notes.isNotBlank() -> draft.notes.trim()
+                                    else -> "${DateTimeHelper.formatShortDate(draft.dateIso)} • ${
+                                        DateTimeHelper.formatTimeRange(draft.startMinuteOfDay, draft.endMinuteOfDay)
+                                    }"
+                                }
                                 Text(
-                                    text = draft.title.ifBlank {
-                                        "${DateTimeHelper.formatShortDate(draft.dateIso)} • ${
-                                            DateTimeHelper.formatTimeRange(draft.startMinuteOfDay, draft.endMinuteOfDay)
-                                        }"
-                                    },
+                                    text = previewText,
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
@@ -195,35 +302,38 @@ fun JadwalScreen(
                         }
 
                         Row(
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
-                            BouncyTextButton(
+                            BouncyOutlinedButton(
+                                onClick = {
+                                    haptics.tapSoft()
+                                    pendingConfirmDiscardDraft = true
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("discard_draft_button"),
+                            ) {
+                                Text("Hapus Draf")
+                            }
+                            BouncyButton(
                                 onClick = {
                                     haptics.tapSoft()
                                     onResumeDraft(draft)
                                 },
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = atmo.accentCobalt,
+                                    contentColor = atmo.onAccentCobalt,
+                                ),
                                 modifier = Modifier
+                                    .weight(1f)
                                     .minimumInteractiveComponentSize()
                                     .testTag("resume_draft_button"),
                             ) {
-                                Text("Lanjutkan", fontWeight = FontWeight.Bold)
-                            }
-                            BouncyIconButton(
-                                onClick = {
-                                    haptics.tapSoft()
-                                    onDiscardDraft()
-                                },
-                                modifier = Modifier
-                                    .minimumInteractiveComponentSize()
-                                    .testTag("discard_draft_button"),
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = "Buang draft",
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(18.dp),
-                                )
+                                Text("Lanjut Edit", fontWeight = FontWeight.Bold)
                             }
                         }
                     }
@@ -238,7 +348,7 @@ fun JadwalScreen(
             item(key = "attendance_checkin_card") {
                 val task = checkInItem.task
                 FrostedGlassCard(
-                    cornerRadius = 18.dp,
+                    cornerRadius = 22.dp,
                     borderColor = atmo.accentMint.copy(alpha = 0.7f),
                     modifier = Modifier.testTag("checkin_prompt_card"),
                 ) {
@@ -296,7 +406,7 @@ fun JadwalScreen(
                                     haptics.tapSoft()
                                     onConfirmAttendance(task, false)
                                 },
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 modifier = Modifier
                                     .weight(0.42f)
                                     .minimumInteractiveComponentSize()
@@ -309,7 +419,7 @@ fun JadwalScreen(
                                     haptics.tapConfirm()
                                     onConfirmAttendance(task, true)
                                 },
-                                shape = RoundedCornerShape(12.dp),
+                                shape = RoundedCornerShape(14.dp),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = atmo.accentMint,
                                     contentColor = atmo.onAccentMint,
@@ -331,7 +441,7 @@ fun JadwalScreen(
             item(key = "missed_override_card") {
                 val task = missedItem.task
                 FrostedGlassCard(
-                    cornerRadius = 18.dp,
+                    cornerRadius = 22.dp,
                     borderColor = statusPalette.darkAccent.copy(alpha = 0.65f),
                     modifier = Modifier.testTag("missed_override_card"),
                 ) {
@@ -375,7 +485,7 @@ fun JadwalScreen(
                                 haptics.tapConfirm()
                                 onOverrideAttended(task)
                             },
-                            shape = RoundedCornerShape(12.dp),
+                            shape = RoundedCornerShape(14.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = atmo.accentMint,
                                 contentColor = atmo.onAccentMint,
@@ -391,7 +501,223 @@ fun JadwalScreen(
             }
         }
 
-        // 4. Bento Grid Shortcut Cards below Quick Glance (Fokus, Rekap, Matriks, Analitik)
+        // 3b. Smart Reschedule Prompt for yesterday's unfinished/missed tasks
+        if (state.yesterdayMissedTasks.isNotEmpty()) {
+            item(key = "yesterday_reschedule_card") {
+                val allMissedIds = remember(state.yesterdayMissedTasks) {
+                    state.yesterdayMissedTasks.map { it.task.id }.toSet()
+                }
+                var selectedIds by remember(allMissedIds) {
+                    mutableStateOf(allMissedIds)
+                }
+                val count = state.yesterdayMissedTasks.size
+                val allSelected = selectedIds.size == allMissedIds.size
+
+                FrostedGlassCard(
+                    cornerRadius = 22.dp,
+                    borderColor = atmo.accentAmber.copy(alpha = 0.65f),
+                    modifier = Modifier.testTag("yesterday_reschedule_card"),
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Surface(
+                                color = atmo.accentAmber.copy(alpha = 0.18f),
+                                shape = CircleShape,
+                                modifier = Modifier.size(36.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.History,
+                                        contentDescription = "Jadwal kemarin belum selesai",
+                                        tint = atmo.accentOrange,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                }
+                            }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Jadwal Kemarin Belum Selesai",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = "Ada $count kegiatan kemarin yang belum tuntas. Pilih yang mau dipindah ke hari ini atau lewati.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+
+                        if (count > 1) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End,
+                            ) {
+                                BouncyTextButton(
+                                    onClick = {
+                                        haptics.tapTick()
+                                        selectedIds = if (allSelected) emptySet() else allMissedIds
+                                    },
+                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                    modifier = Modifier.testTag("yesterday_reschedule_select_all"),
+                                ) {
+                                    Text(
+                                        text = if (allSelected) "Kosongkan Pilihan" else "Pilih Semua ($count)",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                    )
+                                }
+                            }
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            state.yesterdayMissedTasks.forEach { missed ->
+                                val task = missed.task
+                                val isChecked = task.id in selectedIds
+                                Surface(
+                                    color = if (isChecked) {
+                                        atmo.accentAmber.copy(alpha = if (atmo.isDark) 0.15f else 0.10f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+                                    },
+                                    shape = RoundedCornerShape(16.dp),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = if (isChecked) {
+                                            atmo.accentAmber.copy(alpha = 0.55f)
+                                        } else {
+                                            MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+                                        },
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .clickable {
+                                            haptics.tapTick()
+                                            selectedIds = if (isChecked) {
+                                                selectedIds - task.id
+                                            } else {
+                                                selectedIds + task.id
+                                            }
+                                        }
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("yesterday_reschedule_item_${task.id}"),
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    ) {
+                                        Checkbox(
+                                            checked = isChecked,
+                                            onCheckedChange = { checked ->
+                                                haptics.tapTick()
+                                                selectedIds = if (checked) {
+                                                    selectedIds + task.id
+                                                } else {
+                                                    selectedIds - task.id
+                                                }
+                                            },
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = atmo.accentAmber,
+                                                checkmarkColor = atmo.onAccentAmber,
+                                            ),
+                                            modifier = Modifier.minimumInteractiveComponentSize(),
+                                        )
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = task.title,
+                                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                            )
+                                            Text(
+                                                text = DateTimeHelper.formatTimeRange(task.startMinuteOfDay, task.endMinuteOfDay),
+                                                style = MonoSmallStyle,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            BouncyOutlinedButton(
+                                onClick = {
+                                    haptics.tapSoft()
+                                    onSkipYesterday(allMissedIds)
+                                },
+                                shape = RoundedCornerShape(14.dp),
+                                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+                                modifier = Modifier
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("yesterday_reschedule_skip_button"),
+                            ) {
+                                Text("Lewati", maxLines = 1)
+                            }
+                            val moveLabel = when {
+                                selectedIds.isEmpty() -> "Pilih Jadwal"
+                                count == 1 -> "Pindah ke Hari Ini"
+                                selectedIds.size == count -> "Pindah Semua ($count)"
+                                else -> "Pindah Terpilih (${selectedIds.size})"
+                            }
+                            BouncyButton(
+                                onClick = {
+                                    haptics.tapConfirm()
+                                    onRescheduleYesterday(selectedIds)
+                                },
+                                enabled = selectedIds.isNotEmpty(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = atmo.accentAmber,
+                                    contentColor = atmo.onAccentAmber,
+                                ),
+                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .minimumInteractiveComponentSize()
+                                    .testTag("yesterday_reschedule_button"),
+                            ) {
+                                Text(moveLabel, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3c. Worship / Prayer Schedule Card (5 Waktu Sholat or Religion-specific schedule)
+        if (state.prayerReminderEnabled && state.todayWorshipItems.isNotEmpty()) {
+            item(key = "worship_schedule_card") {
+                WorshipScheduleCard(
+                    religion = state.religion,
+                    items = state.todayWorshipItems,
+                    nextItem = state.nextWorshipItem,
+                    countdownLabel = state.nextWorshipCountdown,
+                    locationName = state.currentLocationName,
+                    onToggleComplete = onToggleWorshipComplete,
+                )
+            }
+        }
+
+        // 4. Bento Grid Shortcut Cards below Quick Glance (compact, Matriks & Analitik hidden in Simple Mode)
         item(key = "bento_shortcuts") {
             val todayPhotoCount = state.photoRecaps[todayIso]?.imagePaths?.size ?: 0
             val focusText = if (state.focusTimer.hasActiveSession) {
@@ -429,33 +755,35 @@ fun JadwalScreen(
                         )
                     }
                 }
-                StaggeredEntrance(index = 1) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        BentoShortcutTile(
-                            title = "Matriks",
-                            subtitle = "Timeline & Prioritas",
-                            icon = Icons.Filled.GridView,
-                            containerColor = atmo.accentCoral,
-                            contentColor = atmo.onAccentCoral,
-                            onClick = onOpenMatrixTab,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("bento_matriks"),
-                        )
-                        BentoShortcutTile(
-                            title = "Analitik",
-                            subtitle = "${state.analytics.completionRatePercent}% tuntas",
-                            icon = Icons.Filled.BarChart,
-                            containerColor = atmo.accentAmber,
-                            contentColor = atmo.onAccentAmber,
-                            onClick = onOpenAnalyticsTab,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("bento_analitik"),
-                        )
+                if (!state.isSimpleMode) {
+                    StaggeredEntrance(index = 1) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            BentoShortcutTile(
+                                title = "Matriks",
+                                subtitle = "Timeline & Prioritas",
+                                icon = Icons.Filled.GridView,
+                                containerColor = atmo.accentCoral,
+                                contentColor = atmo.onAccentCoral,
+                                onClick = onOpenMatrixTab,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("bento_matriks"),
+                            )
+                            BentoShortcutTile(
+                                title = "Analitik",
+                                subtitle = "${state.analytics.completionRatePercent}% tuntas",
+                                icon = Icons.Filled.BarChart,
+                                containerColor = atmo.accentAmber,
+                                contentColor = atmo.onAccentAmber,
+                                onClick = onOpenAnalyticsTab,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("bento_analitik"),
+                            )
+                        }
                     }
                 }
             }
@@ -492,7 +820,7 @@ fun JadwalScreen(
         }
 
         item(key = "date_navigator") {
-            FrostedGlassCard(cornerRadius = 18.dp) {
+            FrostedGlassCard(cornerRadius = 22.dp) {
                 Column(
                     modifier = Modifier
                         .animateContentSize(
@@ -593,7 +921,7 @@ fun JadwalScreen(
         }
 
         item(key = "daily_load_summary") {
-            FrostedGlassCard(cornerRadius = 14.dp) {
+            FrostedGlassCard(cornerRadius = 18.dp) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -665,7 +993,7 @@ fun JadwalScreen(
             )
         }
 
-        if (state.filteredScheduleTasks.isEmpty()) {
+        if (state.filteredScheduleTasks.isEmpty() && visibleForeshadows.isEmpty()) {
             item(key = "empty_schedule") {
                 FrostedGlassCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -715,12 +1043,50 @@ fun JadwalScreen(
                     onExportCalendar = onExportCalendar,
                     onEdit = onEditTask,
                     onDelete = onDeleteTask,
+                    onDeleteRecurringSeries = onDeleteRecurringSeries,
                     conflictInfo = state.conflictsByTaskId[item.task.id],
                     onToggleSubTask = onToggleSubTask,
                     onOverrideAttended = onOverrideAttended,
+                    todayIso = todayIso,
+                    nowMinuteOfDay = state.currentMinuteOfDay,
                     modifier = Modifier.animateItem(),
                 )
             }
+        }
+
+        if (visibleForeshadows.isNotEmpty()) {
+            item(key = "foreshadow_section_header") {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = "Bayangan Jadwal Berulang (4 Minggu Ke Depan)",
+                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        text = "Otomatis aktif saat minggu tiba. Ketuk untuk edit lebih awal atau lewati.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            items(
+                items = visibleForeshadows,
+                key = { "foreshadow_${it.parentTask.id}_${it.occurrenceDateIso}" },
+            ) { occ ->
+                ForeshadowGhostCard(
+                    occurrence = occ,
+                    onClick = { selectedForeshadow = occ },
+                    modifier = Modifier.animateItem(),
+                )
+            }
+        }
+        }
         }
     }
 }
@@ -743,7 +1109,7 @@ private fun BentoShortcutTile(
             onClick()
         },
         interactionSource = interaction,
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(22.dp),
         color = containerColor,
         contentColor = contentColor,
         modifier = modifier
@@ -846,7 +1212,7 @@ private fun WeekStrip(
                         scaleY = selectedScale
                     }
                     .bouncyPress(dayInteraction, pressedScale = 0.90f)
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(16.dp))
                     .background(cellBg)
                     .clickable(
                         interactionSource = dayInteraction,
@@ -976,7 +1342,7 @@ private fun MonthCalendarGrid(
                                     scaleY = cellScale
                                 }
                                 .bouncyPress(cellInteraction, pressedScale = 0.90f)
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(RoundedCornerShape(13.dp))
                                 .background(cellBg)
                                 .clickable(
                                     interactionSource = cellInteraction,

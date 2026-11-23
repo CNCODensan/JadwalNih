@@ -68,7 +68,7 @@ fun AtmosphericBackground(
 @Composable
 fun FrostedGlassCard(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 18.dp,
+    cornerRadius: Dp = 22.dp,
     borderColor: Color? = null,
     onClick: (() -> Unit)? = null,
     content: @Composable () -> Unit,
@@ -82,33 +82,16 @@ fun FrostedGlassCard(
         modifier = modifier
             .then(
                 if (onClick != null) {
-                    Modifier.bouncyPress(cardInteraction, pressedScale = 0.96f)
-                } else {
                     Modifier
-                },
-            )
-            .then(
-                if (atmo.isDark) {
-                    Modifier
+                        .bouncyPress(cardInteraction, pressedScale = 0.96f)
+                        .clip(shape)
+                        .clickable(
+                            interactionSource = cardInteraction,
+                            indication = null,
+                            onClick = onClick,
+                        )
                 } else {
-                    Modifier.shadow(
-                        elevation = 4.dp,
-                        shape = shape,
-                        ambientColor = Color.Black.copy(alpha = 0.06f),
-                        spotColor = Color.Black.copy(alpha = 0.08f),
-                    )
-                },
-            )
-            .clip(shape)
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = cardInteraction,
-                        indication = null,
-                        onClick = onClick,
-                    )
-                } else {
-                    Modifier
+                    Modifier.clip(shape)
                 },
             ),
         shape = shape,
@@ -128,9 +111,10 @@ fun FloatingPillNavBar(
     onSelectTab: (MainTab) -> Unit,
     tabIconProvider: (MainTab, Boolean) -> ImageVector,
     modifier: Modifier = Modifier,
+    visibleTabs: List<MainTab> = MainTab.entries,
 ) {
     val atmo = LocalAtmospherePalette.current
-    val pillShape = RoundedCornerShape(34.dp)
+    val pillShape = RoundedCornerShape(36.dp)
 
     Box(
         modifier = modifier
@@ -142,17 +126,11 @@ fun FloatingPillNavBar(
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .shadow(
-                    elevation = if (atmo.isDark) 14.dp else 10.dp,
-                    shape = pillShape,
-                    ambientColor = Color.Black.copy(alpha = 0.14f),
-                    spotColor = Color.Black.copy(alpha = 0.16f),
-                ),
+            modifier = Modifier.fillMaxWidth(),
             shape = pillShape,
             color = atmo.navBarFill,
             contentColor = MaterialTheme.colorScheme.onSurface,
+            shadowElevation = if (atmo.isDark) 8.dp else 6.dp,
             border = BorderStroke(1.dp, atmo.cardBorder),
         ) {
             Row(
@@ -163,7 +141,7 @@ fun FloatingPillNavBar(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 val haptics = LocalHapticFeedback.current
-                MainTab.entries.forEach { tab ->
+                visibleTabs.forEach { tab ->
                     val selected = selectedTab == tab
                     val (activeBg, activeFg) = atmo.tabAccent(tab)
                     val interactionSource = remember { MutableInteractionSource() }
@@ -195,7 +173,7 @@ fun FloatingPillNavBar(
                                 scaleX = scale
                                 scaleY = scale
                             }
-                            .clip(RoundedCornerShape(26.dp))
+                            .clip(RoundedCornerShape(28.dp))
                             .background(pillBg)
                             .clickable(
                                 interactionSource = interactionSource,

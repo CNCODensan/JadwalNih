@@ -12,14 +12,18 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ScheduleTaskEntity::class,
         FocusSessionEntity::class,
         PhotoRecapEntity::class,
+        NotificationLogEntity::class,
+        WorshipCheckinEntity::class,
     ],
-    version = 4,
+    version = 6,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun scheduleTaskDao(): ScheduleTaskDao
     abstract fun focusSessionDao(): FocusSessionDao
     abstract fun photoRecapDao(): PhotoRecapDao
+    abstract fun notificationLogDao(): NotificationLogDao
+    abstract fun worshipCheckinDao(): WorshipCheckinDao
 
     companion object {
         @Volatile
@@ -46,13 +50,67 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE schedule_tasks ADD COLUMN notes TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE schedule_tasks ADD COLUMN iconKey TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE schedule_tasks ADD COLUMN locationName TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE schedule_tasks ADD COLUMN locationLat REAL")
+                db.execSQL("ALTER TABLE schedule_tasks ADD COLUMN locationLng REAL")
+                db.execSQL("ALTER TABLE schedule_tasks ADD COLUMN skippedOccurrenceDates TEXT NOT NULL DEFAULT ''")
+
+                db.execSQL("ALTER TABLE photo_recaps ADD COLUMN locationName TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE photo_recaps ADD COLUMN locationLat REAL")
+                db.execSQL("ALTER TABLE photo_recaps ADD COLUMN locationLng REAL")
+
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS notification_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        category TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        message TEXT NOT NULL,
+                        createdAtEpochMs INTEGER NOT NULL,
+                        isRead INTEGER NOT NULL DEFAULT 0,
+                        relatedTaskId INTEGER,
+                        draftJson TEXT
+                    )
+                    """.trimIndent(),
+                )
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS worship_checkins (
+                        dateItemKey TEXT NOT NULL PRIMARY KEY,
+                        dateIso TEXT NOT NULL,
+                        itemKey TEXT NOT NULL,
+                        title TEXT NOT NULL,
+                        religionName TEXT NOT NULL,
+                        isCompleted INTEGER NOT NULL DEFAULT 0,
+                        completedAtEpochMs INTEGER
+                    )
+                    """.trimIndent(),
+                )
+            }
+        }
+
         fun getInstance(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "jadwalnih_db",
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                ).addMigrations(
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5,
+                    MIGRATION_5_6,
+                )
                     .build()
                     .also { INSTANCE = it }
             }

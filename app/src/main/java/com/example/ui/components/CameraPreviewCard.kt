@@ -13,18 +13,33 @@ import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -38,13 +53,12 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -55,17 +69,18 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -76,8 +91,16 @@ import com.example.ui.theme.MonoSmallStyle
 import java.io.File
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlinx.coroutines.delay
 
-private const val MAX_REKAP_CAMERA_ZOOM = 3.7f
+internal const val MAX_REKAP_CAMERA_ZOOM = 3.7f
+
+enum class CameraZoomUiMode {
+    COLLAPSED,
+    PRESETS,
+    GEAR_DIAL,
+}
 
 @Stable
 class CameraCaptureController(
@@ -147,12 +170,24 @@ fun rememberCameraCaptureController(): CameraCaptureController {
     return remember(context) { CameraCaptureController(context) }
 }
 
-private fun formatZoomLabel(ratio: Float): String {
-    val roundedTenth = (ratio * 10f).toInt()
+internal fun formatZoomLabel(ratio: Float): String {
+    val roundedTenth = (ratio * 10f).roundToInt()
     return if (roundedTenth % 10 == 0) {
         "${roundedTenth / 10}x"
     } else {
-        String.format(Locale.US, "%.1fx", ratio)
+        String.format(Locale.US, "%.1fx", roundedTenth / 10f)
+    }
+}
+
+internal fun buildCameraZoomPresets(maxZoomRatio: Float): List<Float> {
+    val cappedMax = minOf(maxZoomRatio, MAX_REKAP_CAMERA_ZOOM).coerceAtLeast(1f)
+    return if (cappedMax >= 3.65f) {
+        listOf(1f, 2f, MAX_REKAP_CAMERA_ZOOM)
+    } else if (cappedMax >= 2.0f) {
+        listOf(1f, 2f, cappedMax)
+    } else {
+        listOf(1f, ((1f + cappedMax) / 2f), cappedMax)
+            .distinctBy { (it * 10f).roundToInt() }
     }
 }
 
@@ -178,6 +213,9 @@ fun CameraXViewfinder(
         )
     }
     var cameraUnavailableMessage by remember { mutableStateOf<String?>(null) }
+    var zoomUiMode by remember { mutableStateOf(CameraZoomUiMode.COLLAPSED) }
+    var zoomInteractionTick by remember { mutableIntStateOf(0) }
+    var lastPinchDetent by remember { mutableIntStateOf(5) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
@@ -288,6 +326,7 @@ fun CameraXViewfinder(
                 controller.isFrontCamera = useFrontCamera
                 controller.isCameraReady = false
                 controller.zoomRatio = 1f
+                zoomUiMode = CameraZoomUiMode.COLLAPSED
                 cameraUnavailableMessage = null
 
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
@@ -426,82 +465,45 @@ fun CameraXViewfinder(
                             detectTransformGestures { _, _, zoomChange, _ ->
                                 if (abs(zoomChange - 1f) > 0.002f) {
                                     controller.applyZoomScaleFactor(zoomChange)
+                                    zoomUiMode = CameraZoomUiMode.GEAR_DIAL
+                                    zoomInteractionTick += 1
+                                    val detent = (controller.zoomRatio * 5f).roundToInt()
+                                    if (detent != lastPinchDetent) {
+                                        lastPinchDetent = detent
+                                        haptics.tapTick()
+                                    }
                                 }
                             }
                         },
                 )
             }
 
-            // Left-side compact vertical zoom slider overlay (up to 3.7x)
+            // Bottom-left compact zoom button -> 3 presets (1x, 2x, 3.7x) -> camera gear dial on pinch
             val safeMaxZoom = minOf(controller.maxZoomRatio, MAX_REKAP_CAMERA_ZOOM)
             if (controller.isCameraReady && safeMaxZoom > 1.08f) {
-                var lastZoomDetent by remember { mutableIntStateOf((controller.zoomRatio * 2f).toInt()) }
-                Surface(
-                    color = Color(0xA8080D21),
-                    shape = RoundedCornerShape(999.dp),
-                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                CameraZoomControl(
+                    zoomRatio = controller.zoomRatio,
+                    minZoomRatio = controller.minZoomRatio,
+                    maxZoomRatio = safeMaxZoom,
+                    mode = zoomUiMode,
+                    interactionTick = zoomInteractionTick,
+                    onExpandPresets = {
+                        haptics.tapSoft()
+                        zoomUiMode = CameraZoomUiMode.PRESETS
+                        zoomInteractionTick += 1
+                    },
+                    onSelectPreset = { targetZoom ->
+                        haptics.tapTick()
+                        controller.setZoom(targetZoom)
+                        zoomInteractionTick += 1
+                    },
+                    onAutoCollapse = {
+                        zoomUiMode = CameraZoomUiMode.COLLAPSED
+                    },
                     modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .padding(start = 10.dp)
-                        .testTag("camera_zoom_overlay"),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            text = formatZoomLabel(safeMaxZoom),
-                            style = MonoSmallStyle.copy(fontWeight = FontWeight.SemiBold),
-                            color = Color(0xFFCBD5E1),
-                        )
-
-                        Slider(
-                            value = controller.zoomRatio.coerceIn(controller.minZoomRatio, safeMaxZoom),
-                            onValueChange = { targetZoom ->
-                                val detent = (targetZoom * 2f).toInt()
-                                if (detent != lastZoomDetent) {
-                                    lastZoomDetent = detent
-                                    haptics.tapTick()
-                                }
-                                controller.setZoom(targetZoom)
-                            },
-                            valueRange = controller.minZoomRatio..safeMaxZoom,
-                            colors = SliderDefaults.colors(
-                                thumbColor = atmo.accentMint,
-                                activeTrackColor = atmo.accentMint,
-                                inactiveTrackColor = Color.White.copy(alpha = 0.28f),
-                            ),
-                            modifier = Modifier
-                                .graphicsLayer {
-                                    rotationZ = 270f
-                                    transformOrigin = TransformOrigin(0f, 0f)
-                                }
-                                .layout { measurable, constraints ->
-                                    val placeable = measurable.measure(
-                                        Constraints(
-                                            minWidth = constraints.minHeight,
-                                            maxWidth = constraints.maxHeight,
-                                            minHeight = constraints.minWidth,
-                                            maxHeight = constraints.maxWidth,
-                                        ),
-                                    )
-                                    layout(placeable.height, placeable.width) {
-                                        placeable.place(0, placeable.width)
-                                    }
-                                }
-                                .width(140.dp)
-                                .height(34.dp)
-                                .testTag("camera_zoom_slider"),
-                        )
-
-                        Text(
-                            text = formatZoomLabel(controller.zoomRatio),
-                            style = MonoSmallStyle.copy(fontWeight = FontWeight.Bold),
-                            color = atmo.accentMint,
-                        )
-                    }
-                }
+                        .align(Alignment.BottomStart)
+                        .padding(start = 12.dp, bottom = 10.dp),
+                )
             }
 
             // Compact lens indicator pill (top-right inside viewfinder)
@@ -523,17 +525,17 @@ fun CameraXViewfinder(
                 }
             }
 
-            // Compact live time badge pill at bottom-center inside viewfinder
+            // Compact live time badge pill at bottom-right so bottom-left zoom bar has ample room
             Surface(
                 color = Color(0xA8080D21),
                 shape = RoundedCornerShape(999.dp),
                 border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)),
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 10.dp),
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 12.dp, bottom = 10.dp),
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
@@ -559,5 +561,243 @@ fun CameraXViewfinder(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun CameraZoomControl(
+    zoomRatio: Float,
+    minZoomRatio: Float,
+    maxZoomRatio: Float,
+    mode: CameraZoomUiMode,
+    interactionTick: Int,
+    onExpandPresets: () -> Unit,
+    onSelectPreset: (Float) -> Unit,
+    onAutoCollapse: () -> Unit,
+    modifier: Modifier = Modifier,
+    autoCollapsePresetsMs: Long = 2200L,
+    autoCollapsePinchMs: Long = 1600L,
+) {
+    val atmo = LocalAtmospherePalette.current
+    val presets = remember(maxZoomRatio) { buildCameraZoomPresets(maxZoomRatio) }
+
+    LaunchedEffect(mode, interactionTick, zoomRatio) {
+        when (mode) {
+            CameraZoomUiMode.PRESETS -> {
+                delay(autoCollapsePresetsMs)
+                onAutoCollapse()
+            }
+            CameraZoomUiMode.GEAR_DIAL -> {
+                delay(autoCollapsePinchMs)
+                onAutoCollapse()
+            }
+            CameraZoomUiMode.COLLAPSED -> Unit
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            )
+            .testTag("camera_zoom_overlay"),
+    ) {
+        AnimatedContent(
+            targetState = mode,
+            transitionSpec = {
+                (fadeIn(tween(180)) + scaleIn(initialScale = 0.88f))
+                    .togetherWith(fadeOut(tween(130)) + scaleOut(targetScale = 0.90f))
+            },
+            label = "camera_zoom_mode",
+        ) { currentMode ->
+            when (currentMode) {
+                CameraZoomUiMode.COLLAPSED -> {
+                    val interaction = remember { MutableInteractionSource() }
+                    Surface(
+                        onClick = onExpandPresets,
+                        interactionSource = interaction,
+                        shape = CircleShape,
+                        color = Color(0xB8080D21),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.26f)),
+                        modifier = Modifier
+                            .bouncyPress(interaction, pressedScale = 0.90f)
+                            .defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
+                            .testTag("camera_zoom_button"),
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                text = formatZoomLabel(zoomRatio),
+                                style = MonoSmallStyle.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White,
+                            )
+                        }
+                    }
+                }
+
+                CameraZoomUiMode.PRESETS -> {
+                    Surface(
+                        shape = RoundedCornerShape(999.dp),
+                        color = Color(0xCC080D21),
+                        border = BorderStroke(1.dp, atmo.accentMint.copy(alpha = 0.50f)),
+                        modifier = Modifier.testTag("camera_zoom_presets"),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            presets.forEach { preset ->
+                                val presetTagSuffix = formatZoomLabel(preset).replace('.', '_')
+                                val isSelected = abs(zoomRatio - preset) < 0.14f
+                                val chipInteraction = remember(preset) { MutableInteractionSource() }
+                                val chipBg by animateColorAsState(
+                                    targetValue = if (isSelected) atmo.accentMint else Color.White.copy(alpha = 0.08f),
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                    label = "zoom_chip_bg_$presetTagSuffix",
+                                )
+                                val chipFg by animateColorAsState(
+                                    targetValue = if (isSelected) atmo.onAccentMint else Color.White,
+                                    animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                    label = "zoom_chip_fg_$presetTagSuffix",
+                                )
+                                Surface(
+                                    onClick = { onSelectPreset(preset.coerceIn(minZoomRatio, maxZoomRatio)) },
+                                    interactionSource = chipInteraction,
+                                    shape = RoundedCornerShape(999.dp),
+                                    color = chipBg,
+                                    modifier = Modifier
+                                        .bouncyPress(chipInteraction, pressedScale = 0.90f)
+                                        .defaultMinSize(minWidth = 44.dp, minHeight = 40.dp)
+                                        .testTag("camera_zoom_preset_$presetTagSuffix"),
+                                ) {
+                                    Box(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text(
+                                            text = formatZoomLabel(preset),
+                                            style = MonoSmallStyle.copy(fontWeight = FontWeight.Bold),
+                                            color = chipFg,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                CameraZoomUiMode.GEAR_DIAL -> {
+                    Surface(
+                        onClick = onExpandPresets,
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color(0xD4080D21),
+                        border = BorderStroke(1.dp, atmo.accentMint.copy(alpha = 0.62f)),
+                        modifier = Modifier.testTag("camera_zoom_gear_dial"),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Surface(
+                                shape = RoundedCornerShape(999.dp),
+                                color = atmo.accentMint,
+                            ) {
+                                Text(
+                                    text = formatZoomLabel(zoomRatio),
+                                    style = MonoSmallStyle.copy(fontWeight = FontWeight.ExtraBold),
+                                    color = atmo.onAccentMint,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                )
+                            }
+
+                            CameraZoomGearCanvas(
+                                zoomRatio = zoomRatio,
+                                minZoom = minZoomRatio.coerceAtLeast(1f),
+                                maxZoom = maxZoomRatio.coerceAtLeast(1.1f),
+                                accentColor = atmo.accentMint,
+                                modifier = Modifier
+                                    .width(126.dp)
+                                    .height(28.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CameraZoomGearCanvas(
+    zoomRatio: Float,
+    minZoom: Float,
+    maxZoom: Float,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier) {
+        val centerX = size.width / 2f
+        val baseBottomY = size.height - 2.dp.toPx()
+        val pxPerTenth = 8.dp.toPx()
+        val currentTenth = (zoomRatio.coerceIn(minZoom, maxZoom) * 10f)
+        val minTenth = (minZoom * 10f).roundToInt()
+        val maxTenth = (maxZoom * 10f).roundToInt()
+
+        // Subtle machined gear track along the bottom
+        drawRoundRect(
+            color = Color.White.copy(alpha = 0.14f),
+            topLeft = Offset(0f, baseBottomY - 2.dp.toPx()),
+            size = Size(size.width, 2.dp.toPx()),
+            cornerRadius = CornerRadius(4f, 4f),
+        )
+
+        for (step in minTenth..maxTenth) {
+            val x = centerX + (step - currentTenth) * pxPerTenth
+            if (x < 2f || x > size.width - 2f) continue
+
+            val isMajor = step == 10 || step == 20 || step == 30 || step == maxTenth
+            val isMedium = !isMajor && step % 5 == 0
+            val distFactor = (1f - (abs(x - centerX) / (size.width * 0.52f))).coerceIn(0.22f, 1f)
+
+            val tickHeight = when {
+                isMajor -> 17.dp.toPx()
+                isMedium -> 12.dp.toPx()
+                else -> 7.5.dp.toPx()
+            }
+            val tickStroke = when {
+                isMajor -> 2.1.dp.toPx()
+                isMedium -> 1.5.dp.toPx()
+                else -> 1.1.dp.toPx()
+            }
+            val tickColor = if (isMajor) {
+                Color.White.copy(alpha = 0.95f * distFactor)
+            } else {
+                Color(0xFFCBD5E1).copy(alpha = 0.65f * distFactor)
+            }
+
+            drawLine(
+                color = tickColor,
+                start = Offset(x, baseBottomY - tickHeight),
+                end = Offset(x, baseBottomY),
+                strokeWidth = tickStroke,
+                cap = StrokeCap.Round,
+            )
+        }
+
+        // Fixed center indicator needle
+        drawLine(
+            color = accentColor,
+            start = Offset(centerX, 2.dp.toPx()),
+            end = Offset(centerX, baseBottomY + 1.dp.toPx()),
+            strokeWidth = 2.6.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
     }
 }

@@ -2,6 +2,7 @@ package com.example.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.RepeatMode
@@ -17,6 +18,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -40,13 +42,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CloseFullscreen
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Mosque
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -79,12 +84,15 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.domain.DateTimeHelper
 import com.example.domain.ScheduleTask
+import com.example.domain.TaskIconCatalog
+import com.example.domain.WorshipScheduleItem
 import com.example.ui.JadwalNihUiState
 import com.example.ui.components.AtmosphericBackground
 import com.example.ui.components.BouncyButton
 import com.example.ui.components.BouncyFilledTonalButton
 import com.example.ui.components.BouncyIconButton
 import com.example.ui.components.BouncyOutlinedButton
+import com.example.ui.components.BouncyTextButton
 import com.example.ui.components.FrostedGlassCard
 import com.example.ui.components.bouncyPress
 import com.example.ui.components.shakeOnTrigger
@@ -108,6 +116,8 @@ fun FokusScreen(
     onStopAndSave: () -> Unit,
     onToggleDistractionFree: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    onDismissWorshipPrompt: () -> Unit = {},
+    onMarkWorshipDone: (WorshipScheduleItem) -> Unit = {},
 ) {
     val timer = state.focusTimer
     val atmo = LocalAtmospherePalette.current
@@ -123,14 +133,22 @@ fun FokusScreen(
     val activeTasks = remember(state.allTasksWithStatus) {
         state.allTasksWithStatus.filterNot { it.task.isCompleted }.map { it.task }
     }
+    val linkedTask = remember(timer.linkedTaskId, state.allTasksWithStatus) {
+        timer.linkedTaskId?.let { id ->
+            state.allTasksWithStatus.firstOrNull { it.task.id == id }?.task
+        }
+    }
 
     if (timer.isDistractionFreeMode) {
         DistractionFreeFocusDialog(
             state = state,
+            linkedTask = linkedTask,
             onPause = onPause,
             onResume = onResume,
             onStopAndSave = onStopAndSave,
             onExitDistractionFree = { onToggleDistractionFree(false) },
+            onDismissWorshipPrompt = onDismissWorshipPrompt,
+            onMarkWorshipDone = onMarkWorshipDone,
         )
     }
 
@@ -147,17 +165,29 @@ fun FokusScreen(
                     color = MaterialTheme.colorScheme.onBackground,
                 )
                 Text(
-                    text = "Atur durasi bebas 1–240 menit, tanpa aturan kaku.",
+                    text = "Atur durasi bebas 1–240 menit, tetap fokus pelan-pelan.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
 
+        state.focusGentleWorshipPrompt?.let { promptItem ->
+            item(key = "gentle_worship_prompt") {
+                AnimatedVisibility(visible = true) {
+                    GentleFocusWorshipBanner(
+                        item = promptItem,
+                        onMarkDone = { onMarkWorshipDone(promptItem) },
+                        onDismiss = onDismissWorshipPrompt,
+                    )
+                }
+            }
+        }
+
         item(key = "timer_card") {
             FrostedGlassCard(
                 modifier = Modifier.fillMaxWidth(),
-                cornerRadius = 22.dp,
+                cornerRadius = 26.dp,
             ) {
                 Column(
                     modifier = Modifier
@@ -345,7 +375,10 @@ fun FokusScreen(
                                 .minimumInteractiveComponentSize()
                                 .testTag("focus_link_task_button"),
                         ) {
-                            Icon(Icons.Filled.Link, contentDescription = null)
+                            val buttonIcon = linkedTask?.let {
+                                TaskIconCatalog.resolveIcon(it.iconKey, it.title)
+                            } ?: Icons.Filled.Link
+                            Icon(buttonIcon, contentDescription = null)
                             Spacer(Modifier.width(8.dp))
                             Text(
                                 text = timer.linkedTaskTitle ?: "Pilih Tugas (Opsional)",
@@ -366,7 +399,15 @@ fun FokusScreen(
                                 },
                             )
                             activeTasks.forEach { t ->
+                                val taskIcon = TaskIconCatalog.resolveIcon(t.iconKey, t.title)
                                 DropdownMenuItem(
+                                    leadingIcon = {
+                                        Icon(
+                                            imageVector = taskIcon,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    },
                                     text = { Text(t.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                                     onClick = {
                                         haptics.tapSoft()
@@ -398,7 +439,7 @@ fun FokusScreen(
                                             onStart()
                                         },
                                         enabled = isValid,
-                                        shape = RoundedCornerShape(14.dp),
+                                        shape = RoundedCornerShape(16.dp),
                                         colors = androidx.compose.material3.ButtonDefaults.buttonColors(
                                             containerColor = atmo.accentOrange,
                                             contentColor = atmo.onAccentOrange,
@@ -482,7 +523,7 @@ fun FokusScreen(
 
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(18.dp),
                     ) {
                         Row(
                             modifier = Modifier
@@ -529,7 +570,7 @@ fun FokusScreen(
             item(key = "empty_focus_history") {
                 FrostedGlassCard(
                     modifier = Modifier.fillMaxWidth(),
-                    cornerRadius = 16.dp,
+                    cornerRadius = 20.dp,
                 ) {
                     Text(
                         text = "Belum ada riwayat fokus. Yuk mulai sesi pertama!",
@@ -548,7 +589,7 @@ fun FokusScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .animateItem(),
-                    cornerRadius = 14.dp,
+                    cornerRadius = 18.dp,
                 ) {
                     Row(
                         modifier = Modifier
@@ -600,12 +641,84 @@ fun FokusScreen(
 }
 
 @Composable
+private fun GentleFocusWorshipBanner(
+    item: WorshipScheduleItem,
+    onMarkDone: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val atmo = LocalAtmospherePalette.current
+    val haptics = LocalHapticFeedback.current
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = atmo.accentMint.copy(alpha = if (atmo.isDark) 0.16f else 0.12f),
+        border = BorderStroke(1.dp, atmo.accentMint.copy(alpha = 0.55f)),
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("focus_gentle_worship_prompt"),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Mosque,
+                contentDescription = "Pengingat ibadah lembut",
+                tint = atmo.accentMint,
+                modifier = Modifier.size(20.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Masuk waktu ${item.title} (${item.formattedTime})",
+                    style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = "Timer tetap jalan. Ambil jeda sebentar kapan kamu siap.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            BouncyTextButton(
+                onClick = {
+                    haptics.tapConfirm()
+                    onMarkDone()
+                },
+                modifier = Modifier.testTag("focus_worship_mark_done"),
+            ) {
+                Text("Sudah", fontWeight = FontWeight.Bold)
+            }
+            BouncyIconButton(
+                onClick = {
+                    haptics.tapSoft()
+                    onDismiss()
+                },
+                modifier = Modifier
+                    .minimumInteractiveComponentSize()
+                    .testTag("focus_worship_dismiss"),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Tutup pengingat ibadah",
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun DistractionFreeFocusDialog(
     state: JadwalNihUiState,
+    linkedTask: ScheduleTask?,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onStopAndSave: () -> Unit,
     onExitDistractionFree: () -> Unit,
+    onDismissWorshipPrompt: () -> Unit,
+    onMarkWorshipDone: (WorshipScheduleItem) -> Unit,
 ) {
     val timer = state.focusTimer
     val atmo = LocalAtmospherePalette.current
@@ -660,6 +773,14 @@ private fun DistractionFreeFocusDialog(
                     }
                 }
 
+                state.focusGentleWorshipPrompt?.let { promptItem ->
+                    GentleFocusWorshipBanner(
+                        item = promptItem,
+                        onMarkDone = { onMarkWorshipDone(promptItem) },
+                        onDismiss = onDismissWorshipPrompt,
+                    )
+                }
+
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(18.dp),
@@ -687,12 +808,25 @@ private fun DistractionFreeFocusDialog(
                         )
                     }
 
-                    Text(
-                        text = timer.linkedTaskTitle ?: "Tetap hadir, selesaikan pelan-pelan.",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center,
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        if (linkedTask != null) {
+                            Icon(
+                                imageVector = TaskIconCatalog.resolveIcon(linkedTask.iconKey, linkedTask.title),
+                                contentDescription = null,
+                                tint = atmo.accentOrange,
+                                modifier = Modifier.size(20.dp),
+                            )
+                        }
+                        Text(
+                            text = timer.linkedTaskTitle ?: "Tetap hadir, selesaikan pelan-pelan.",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
 
                 Row(

@@ -60,6 +60,7 @@ import com.example.domain.ScheduleScope
 import com.example.ui.JadwalNihUiState
 import com.example.ui.components.FrostedGlassCard
 import com.example.ui.components.StaggeredEntrance
+import com.example.ui.components.WeeklyWorshipAnalyticsCard
 import com.example.ui.components.bouncyPress
 import com.example.ui.components.tapSoft
 import com.example.ui.theme.LocalAtmospherePalette
@@ -190,8 +191,14 @@ fun AnalitikScreen(
             }
         }
 
-        item(key = "consistency_heatmap") {
+        item(key = "worship_analytics") {
             StaggeredEntrance(index = 1) {
+                WeeklyWorshipAnalyticsCard(summary = analytics.worshipSummary)
+            }
+        }
+
+        item(key = "consistency_heatmap") {
+            StaggeredEntrance(index = 2) {
                 ConsistencyHeatmapCard(
                     streakDays = analytics.streakDays,
                     cells = analytics.heatmapDays,
@@ -201,7 +208,7 @@ fun AnalitikScreen(
 
         item(key = "completion_bar_chart") {
             StaggeredEntrance(index = 2) {
-                FrostedGlassCard(cornerRadius = 20.dp) {
+                FrostedGlassCard(cornerRadius = 24.dp) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -236,7 +243,7 @@ fun AnalitikScreen(
 
         item(key = "quadrant_distribution") {
             StaggeredEntrance(index = 3) {
-                FrostedGlassCard(cornerRadius = 20.dp) {
+                FrostedGlassCard(cornerRadius = 24.dp) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -320,7 +327,7 @@ private fun ConsistencyHeatmapCard(
 
     FrostedGlassCard(
         modifier = Modifier.testTag("consistency_heatmap_card"),
-        cornerRadius = 20.dp,
+        cornerRadius = 24.dp,
     ) {
         Column(
             modifier = Modifier
@@ -393,7 +400,7 @@ private fun ConsistencyHeatmapCard(
                     ) {
                         weekRow.forEach { cell ->
                             val cellColor by animateColorAsState(
-                                targetValue = heatmapCellColor(cell, atmo.isDark, atmo.accentMint),
+                                targetValue = heatmapCellColor(cell, atmo),
                                 animationSpec = tween(durationMillis = 260),
                                 label = "heatmap_cell_${cell.dateIso}",
                             )
@@ -401,7 +408,7 @@ private fun ConsistencyHeatmapCard(
                                 modifier = Modifier
                                     .weight(1f)
                                     .aspectRatio(1.45f)
-                                    .clip(RoundedCornerShape(7.dp))
+                                    .clip(RoundedCornerShape(9.dp))
                                     .background(cellColor),
                             )
                         }
@@ -425,8 +432,8 @@ private fun ConsistencyHeatmapCard(
                     Box(
                         modifier = Modifier
                             .size(12.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(heatmapCellColor(sampleCell, atmo.isDark, atmo.accentMint)),
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(heatmapCellColor(sampleCell, atmo)),
                     )
                     Spacer(Modifier.width(4.dp))
                 }
@@ -442,18 +449,17 @@ private fun ConsistencyHeatmapCard(
 
 private fun heatmapCellColor(
     cell: HeatmapDayCell,
-    isDark: Boolean,
-    accentMint: Color,
+    atmo: com.example.ui.theme.AtmospherePalette,
 ): Color {
     if (cell.isFuture) {
-        return if (isDark) Color(0xFF171D2B) else Color(0xFFEEF2F6)
+        return atmo.surfaceSubtle
     }
     return when (cell.level) {
-        0 -> if (isDark) Color(0xFF252E42) else Color(0xFFE2E8F0)
-        1 -> accentMint.copy(alpha = if (isDark) 0.34f else 0.28f)
-        2 -> accentMint.copy(alpha = if (isDark) 0.56f else 0.50f)
-        3 -> accentMint.copy(alpha = if (isDark) 0.78f else 0.74f)
-        else -> accentMint
+        0 -> atmo.surfaceMuted
+        1 -> atmo.accentMint.copy(alpha = if (atmo.isDark) 0.34f else 0.28f)
+        2 -> atmo.accentMint.copy(alpha = if (atmo.isDark) 0.56f else 0.50f)
+        3 -> atmo.accentMint.copy(alpha = if (atmo.isDark) 0.78f else 0.74f)
+        else -> atmo.accentMint
     }
 }
 
@@ -466,7 +472,7 @@ private fun KpiCard(
 ) {
     FrostedGlassCard(
         modifier = modifier,
-        cornerRadius = 18.dp,
+        cornerRadius = 22.dp,
     ) {
         Column(
             modifier = Modifier.padding(14.dp),

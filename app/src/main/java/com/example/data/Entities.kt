@@ -4,6 +4,8 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.example.domain.AttendanceStatus
 import com.example.domain.FocusSession
+import com.example.domain.NotificationCategory
+import com.example.domain.NotificationLogEntry
 import com.example.domain.PhotoRecap
 import com.example.domain.PriorityQuadrant
 import com.example.domain.RecurrenceRule
@@ -31,6 +33,12 @@ data class ScheduleTaskEntity(
     val subtasksJson: String = "[]",
     val attendanceStatusName: String = AttendanceStatus.UNCONFIRMED.name,
     val isSubtasksTodoMode: Boolean = false,
+    val notes: String = "",
+    val iconKey: String = "",
+    val locationName: String = "",
+    val locationLat: Double? = null,
+    val locationLng: Double? = null,
+    val skippedOccurrenceDates: String = "",
 )
 
 @Entity(tableName = "focus_sessions")
@@ -52,6 +60,32 @@ data class PhotoRecapEntity(
     val caption: String,
     val imagePathsJson: String,
     val updatedAtEpochMs: Long,
+    val locationName: String = "",
+    val locationLat: Double? = null,
+    val locationLng: Double? = null,
+)
+
+@Entity(tableName = "notification_logs")
+data class NotificationLogEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val category: String,
+    val title: String,
+    val message: String,
+    val createdAtEpochMs: Long,
+    val isRead: Boolean = false,
+    val relatedTaskId: Long? = null,
+    val draftJson: String? = null,
+)
+
+@Entity(tableName = "worship_checkins")
+data class WorshipCheckinEntity(
+    @PrimaryKey val dateItemKey: String, // e.g., "2026-11-23|subuh"
+    val dateIso: String,
+    val itemKey: String,
+    val title: String,
+    val religionName: String,
+    val isCompleted: Boolean,
+    val completedAtEpochMs: Long? = null,
 )
 
 fun serializeSubTasks(subtasks: List<SubTaskItem>): String {
@@ -111,6 +145,16 @@ fun ScheduleTaskEntity.toDomain(): ScheduleTask = ScheduleTask(
     attendanceStatus = runCatching { AttendanceStatus.valueOf(attendanceStatusName) }
         .getOrDefault(AttendanceStatus.UNCONFIRMED),
     isSubtasksTodoMode = isSubtasksTodoMode,
+    notes = notes,
+    iconKey = iconKey,
+    locationName = locationName,
+    locationLat = locationLat,
+    locationLng = locationLng,
+    skippedOccurrenceDates = skippedOccurrenceDates
+        .split(",")
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .toSet(),
 )
 
 fun ScheduleTask.toEntity(): ScheduleTaskEntity = ScheduleTaskEntity(
@@ -131,6 +175,12 @@ fun ScheduleTask.toEntity(): ScheduleTaskEntity = ScheduleTaskEntity(
     subtasksJson = serializeSubTasks(subtasks),
     attendanceStatusName = attendanceStatus.name,
     isSubtasksTodoMode = isSubtasksTodoMode,
+    notes = notes,
+    iconKey = iconKey,
+    locationName = locationName,
+    locationLat = locationLat,
+    locationLng = locationLng,
+    skippedOccurrenceDates = skippedOccurrenceDates.sorted().joinToString(","),
 )
 
 fun FocusSessionEntity.toDomain(): FocusSession = FocusSession(
@@ -170,6 +220,9 @@ fun PhotoRecapEntity.toDomain(): PhotoRecap {
         caption = caption,
         imagePaths = paths,
         updatedAtEpochMs = updatedAtEpochMs,
+        locationName = locationName,
+        locationLat = locationLat,
+        locationLng = locationLng,
     )
 }
 
@@ -182,5 +235,31 @@ fun PhotoRecap.toEntity(): PhotoRecapEntity {
         caption = caption,
         imagePathsJson = arr.toString(),
         updatedAtEpochMs = updatedAtEpochMs,
+        locationName = locationName,
+        locationLat = locationLat,
+        locationLng = locationLng,
     )
 }
+
+fun NotificationLogEntity.toDomain(): NotificationLogEntry = NotificationLogEntry(
+    id = id,
+    category = runCatching { NotificationCategory.valueOf(category) }
+        .getOrDefault(NotificationCategory.TASK),
+    title = title,
+    message = message,
+    createdAtEpochMs = createdAtEpochMs,
+    isRead = isRead,
+    relatedTaskId = relatedTaskId,
+    draftJson = draftJson,
+)
+
+fun NotificationLogEntry.toEntity(): NotificationLogEntity = NotificationLogEntity(
+    id = id,
+    category = category.name,
+    title = title,
+    message = message,
+    createdAtEpochMs = createdAtEpochMs,
+    isRead = isRead,
+    relatedTaskId = relatedTaskId,
+    draftJson = draftJson,
+)

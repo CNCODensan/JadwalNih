@@ -9,6 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -17,10 +20,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.domain.DateTimeHelper
+import com.example.domain.DurationCategory
 import com.example.domain.PriorityQuadrant
 import com.example.domain.TaskStatus
 import com.example.ui.theme.LocalStatusPalette
+import com.example.ui.theme.MonoSmallStyle
 import com.example.ui.theme.SemanticStatusPalette
 
 data class StatusColors(
@@ -87,7 +94,7 @@ fun QuadrantChip(
     Surface(
         modifier = modifier,
         color = bg,
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
     ) {
         Text(
             text = "${quadrant.shortCode} • ${quadrant.chipLabelId}",
@@ -96,5 +103,44 @@ fun QuadrantChip(
             modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
             maxLines = 1,
         )
+    }
+}
+
+@Composable
+fun DurationCategoryChip(
+    category: DurationCategory,
+    totalMinutes: Int,
+    modifier: Modifier = Modifier,
+) {
+    val palette = LocalStatusPalette.current
+    val (bg, fg, accent) = when (category) {
+        DurationCategory.SHORT -> Triple(palette.greenBg, palette.greenFg, palette.greenAccent)
+        DurationCategory.MEDIUM -> Triple(palette.blueBg, palette.blueFg, palette.blueAccent)
+        DurationCategory.LONG -> Triple(palette.yellowBg, palette.yellowFg, palette.yellowAccent)
+    }
+    Surface(
+        modifier = modifier,
+        color = bg,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, accent.copy(alpha = 0.35f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Schedule,
+                contentDescription = null,
+                tint = fg,
+                modifier = Modifier.size(11.dp),
+            )
+            Text(
+                text = "${DateTimeHelper.formatDuration(totalMinutes)} • ${category.labelId}",
+                style = MonoSmallStyle.copy(fontWeight = FontWeight.SemiBold),
+                color = fg,
+                maxLines = 1,
+            )
+        }
     }
 }
