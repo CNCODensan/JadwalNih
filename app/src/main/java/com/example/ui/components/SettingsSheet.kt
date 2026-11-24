@@ -30,24 +30,33 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.BrightnessAuto
+import androidx.compose.material.icons.filled.Cake
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Celebration
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LightMode
+import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Mosque
 import androidx.compose.material.icons.filled.MyLocation
 import androidx.compose.material.icons.filled.NotificationsActive
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.PrivacyTip
 import androidx.compose.material.icons.filled.Spa
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -58,6 +67,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -77,8 +87,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.example.domain.DateTimeHelper
 import com.example.domain.HolidayThemeType
+import com.example.domain.IndonesiaRegency
 import com.example.domain.LocationHelper
+import com.example.domain.PersonalBirthdayStats
+import com.example.domain.PrayerCardVisibilityMode
 import com.example.domain.QuickGlanceTarget
 import com.example.domain.ReligionOption
 import com.example.domain.ThemeMode
@@ -117,6 +131,20 @@ fun SettingsSheet(
     onHolidayThemePreviewChange: (HolidayThemeType) -> Unit = {},
     onDetectLocation: () -> Unit = {},
     onManualLocationSave: (String) -> Unit = {},
+    onRegionSelected: (IndonesiaRegency) -> Unit = {},
+    birthDateIso: String = "",
+    personalBirthdayStats: PersonalBirthdayStats = PersonalBirthdayStats(),
+    prayerCardVisibilityMode: PrayerCardVisibilityMode = PrayerCardVisibilityMode.ONLY_ACTIVE_WINDOW,
+    allowMissedPrayerManualEdit: Boolean = true,
+    currentLatitude: Double? = null,
+    currentLongitude: Double? = null,
+    onBirthDateSave: (String) -> Unit = {},
+    onTriggerBirthdayPreview: () -> Unit = {},
+    onPrayerCardVisibilityChange: (PrayerCardVisibilityMode) -> Unit = {},
+    onAllowMissedPrayerEditChange: (Boolean) -> Unit = {},
+    onOpenWorshipHistory: () -> Unit = {},
+    onConfirmMapLocation: (String, Double, Double) -> Unit = { _, _, _ -> },
+    onReplayHolidayMotion: () -> Unit = {},
 ) {
     val atmo = LocalAtmospherePalette.current
     val context = LocalContext.current
@@ -124,6 +152,9 @@ fun SettingsSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var showConfirmReset by remember { mutableStateOf(false) }
     var showPrivacyDialog by remember { mutableStateOf(false) }
+    var showRegionPicker by remember { mutableStateOf(false) }
+    var showMapPicker by remember { mutableStateOf(false) }
+    var showBirthDatePicker by remember { mutableStateOf(false) }
     var manualLocationDraft by remember(currentLocationName) { mutableStateOf(currentLocationName) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -142,6 +173,60 @@ fun SettingsSheet(
     ) { granted ->
         if (granted) {
             onDetectLocation()
+        }
+    }
+
+    if (showRegionPicker) {
+        IndonesiaRegionPickerSheet(
+            onSelectRegency = { regency ->
+                manualLocationDraft = regency.displayFullName
+                onRegionSelected(regency)
+            },
+            onDismiss = { showRegionPicker = false },
+        )
+    }
+
+    if (showMapPicker) {
+        MapLocationPickerSheet(
+            initialLocationName = currentLocationName,
+            initialLatitude = currentLatitude,
+            initialLongitude = currentLongitude,
+            onConfirmLocation = { name, lat, lng ->
+                manualLocationDraft = name
+                onConfirmMapLocation(name, lat, lng)
+            },
+            onDismiss = { showMapPicker = false },
+        )
+    }
+
+    if (showBirthDatePicker) {
+        val initialBirthIso = birthDateIso.takeIf { it.isNotBlank() } ?: "2000-01-01"
+        val datePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = DateTimeHelper.isoToUtcDatePickerMillis(initialBirthIso),
+        )
+        DatePickerDialog(
+            onDismissRequest = { showBirthDatePicker = false },
+            confirmButton = {
+                BouncyTextButton(
+                    onClick = {
+                        haptics.tapConfirm()
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            onBirthDateSave(DateTimeHelper.utcDatePickerMillisToIso(millis))
+                        }
+                        showBirthDatePicker = false
+                    },
+                    modifier = Modifier.testTag("settings_confirm_birthdate_button"),
+                ) {
+                    Text("Simpan")
+                }
+            },
+            dismissButton = {
+                BouncyTextButton(onClick = { showBirthDatePicker = false }) {
+                    Text("Batal")
+                }
+            },
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 
@@ -324,6 +409,109 @@ fun SettingsSheet(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+
+            // Tanggal Lahir & Perayaan Ulang Tahun
+            Surface(
+                color = atmo.sheetCardBg,
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.testTag("settings_birthday_card"),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Cake,
+                            contentDescription = null,
+                            tint = Color(0xFFEC4899),
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Ulang Tahun & Perayaan",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text = "Otomatis jadwalkan ulang tahun tahunan dan aktifkan tema kue, lilin & statistik.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        BouncyOutlinedButton(
+                            onClick = {
+                                haptics.tapSoft()
+                                showBirthDatePicker = true
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .minimumInteractiveComponentSize()
+                                .testTag("settings_pick_birthdate_button"),
+                        ) {
+                            Icon(Icons.Filled.CalendarMonth, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = if (birthDateIso.isNotBlank()) {
+                                    DateTimeHelper.formatIndonesianFullDate(birthDateIso)
+                                } else {
+                                    "Atur Tanggal Lahir"
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        if (birthDateIso.isNotBlank()) {
+                            BouncyTextButton(
+                                onClick = {
+                                    haptics.tapSoft()
+                                    onBirthDateSave("")
+                                },
+                                modifier = Modifier.testTag("settings_clear_birthdate_button"),
+                            ) {
+                                Text("Hapus", color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+
+                    Text(
+                        text = "Memakai JadwalNih: ${personalBirthdayStats.usageDurationLabel} • ${personalBirthdayStats.completedTasksCount} tugas tuntas",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
+                    BouncyOutlinedButton(
+                        onClick = {
+                            haptics.tapConfirm()
+                            onDismiss()
+                            onTriggerBirthdayPreview()
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .minimumInteractiveComponentSize()
+                            .testTag("settings_preview_birthday_button"),
+                    ) {
+                        Icon(Icons.Filled.Cake, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Pratinjau Kartu & Tema Ulang Tahun")
+                    }
                 }
             }
 
@@ -658,7 +846,7 @@ fun SettingsSheet(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.VolumeUp,
+                                    imageVector = Icons.AutoMirrored.Filled.VolumeUp,
                                     contentDescription = null,
                                     tint = atmo.accentCobalt,
                                 )
@@ -687,6 +875,92 @@ fun SettingsSheet(
                                 },
                                 modifier = Modifier.testTag("settings_worship_sound_switch"),
                             )
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                        Text(
+                            text = "Tampilan Kartu Sholat/Ibadah",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            PrayerCardVisibilityMode.entries.forEach { mode ->
+                                BouncyFilterChip(
+                                    selected = prayerCardVisibilityMode == mode,
+                                    onClick = {
+                                        haptics.tapSoft()
+                                        onPrayerCardVisibilityChange(mode)
+                                    },
+                                    label = { Text(mode.labelId) },
+                                    modifier = Modifier.testTag("settings_prayer_visibility_${mode.name}"),
+                                )
+                            }
+                        }
+                        Text(
+                            text = when (prayerCardVisibilityMode) {
+                                PrayerCardVisibilityMode.ONLY_ACTIVE_WINDOW ->
+                                    "Kartu disembunyikan penuh saat di luar rentang waktu sholat alami."
+                                PrayerCardVisibilityMode.COMPACT_COUNTDOWN ->
+                                    "Menampilkan hitung mundur menuju waktu ibadah berikutnya."
+                                PrayerCardVisibilityMode.ALWAYS_SHOW ->
+                                    "Menampilkan daftar lengkap seluruh waktu ibadah."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Edit Manual Sholat Lewat (7 Hari)",
+                                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Text(
+                                    text = if (allowMissedPrayerManualEdit) {
+                                        "Bisa centang manual ibadah terlewat hingga 7 hari lalu."
+                                    } else {
+                                        "Terkunci — hari lalu hanya bisa dibaca."
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Switch(
+                                checked = allowMissedPrayerManualEdit,
+                                onCheckedChange = {
+                                    haptics.tapSoft()
+                                    onAllowMissedPrayerEditChange(it)
+                                },
+                                modifier = Modifier.testTag("settings_missed_prayer_lock_switch"),
+                            )
+                        }
+
+                        BouncyOutlinedButton(
+                            onClick = {
+                                haptics.tapSoft()
+                                onDismiss()
+                                onOpenWorshipHistory()
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .minimumInteractiveComponentSize()
+                                .testTag("settings_open_worship_history"),
+                        ) {
+                            Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Buka Riwayat Ibadah (7 Hari)")
                         }
                     }
                 }
@@ -757,6 +1031,42 @@ fun SettingsSheet(
                         }
                     }
 
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        BouncyOutlinedButton(
+                            onClick = {
+                                haptics.tapSoft()
+                                showMapPicker = true
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .minimumInteractiveComponentSize()
+                                .testTag("settings_open_map_picker_button"),
+                        ) {
+                            Icon(Icons.Filled.Map, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Pilih di Peta", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        BouncyOutlinedButton(
+                            onClick = {
+                                haptics.tapSoft()
+                                showRegionPicker = true
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .minimumInteractiveComponentSize()
+                                .testTag("settings_pick_region_button"),
+                        ) {
+                            Icon(Icons.Filled.LocationCity, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Kota Indonesia", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+
                     BouncyButton(
                         onClick = {
                             haptics.tapSoft()
@@ -780,7 +1090,31 @@ fun SettingsSheet(
                             } else {
                                 "Deteksi Lokasi Otomatis (GPS)"
                             },
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
                         )
+                    }
+
+                    if (currentLatitude != null && currentLongitude != null) {
+                        BouncyTextButton(
+                            onClick = {
+                                haptics.tapSoft()
+                                openInGoogleMaps(
+                                    context = context,
+                                    latitude = currentLatitude,
+                                    longitude = currentLongitude,
+                                    label = currentLocationName,
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .minimumInteractiveComponentSize()
+                                .testTag("settings_open_google_maps_button"),
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Buka Koordinat di Google Maps")
+                        }
                     }
                 }
             }
@@ -854,6 +1188,25 @@ fun SettingsSheet(
                                 label = { Text(themeOption.labelId) },
                                 modifier = Modifier.testTag("settings_holiday_preview_${themeOption.name}"),
                             )
+                        }
+                    }
+
+                    if (holidayThemePreview != HolidayThemeType.NONE) {
+                        BouncyOutlinedButton(
+                            onClick = {
+                                haptics.tapConfirm()
+                                onDismiss()
+                                onReplayHolidayMotion()
+                            },
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .minimumInteractiveComponentSize()
+                                .testTag("settings_replay_holiday_motion"),
+                        ) {
+                            Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Putar Animasi Motion Tema (${holidayThemePreview.labelId})")
                         }
                     }
                 }
@@ -981,7 +1334,9 @@ fun SettingsSheet(
                             haptics.tapSoft()
                             showPrivacyDialog = true
                         },
-                        modifier = Modifier.testTag("settings_privacy_info_button"),
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("settings_privacy_info_button"),
                     ) {
                         Icon(Icons.Filled.PrivacyTip, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
@@ -993,6 +1348,7 @@ fun SettingsSheet(
                         haptics.tapSoft()
                         onDismiss()
                     },
+                    modifier = Modifier.minimumInteractiveComponentSize(),
                 ) {
                     Text("Tutup")
                 }

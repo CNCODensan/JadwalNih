@@ -40,6 +40,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CameraAlt
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.filled.Cameraswitch
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -70,27 +72,39 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.domain.DateTimeHelper
+import com.example.domain.PhotoRecap
 import com.example.domain.PhotoTextAlignment
 import com.example.domain.PhotoTextStyle
 import com.example.ui.JadwalNihUiState
+import com.example.ui.components.BouncyButton
+import com.example.ui.components.BouncyOutlinedButton
 import com.example.ui.components.BouncyTextButton
 import com.example.ui.components.CameraXViewfinder
+import com.example.ui.components.DEFAULT_INDONESIA_LAT
+import com.example.ui.components.DEFAULT_INDONESIA_LNG
+import com.example.ui.components.MapLocationPickerSheet
+import com.example.ui.components.OsmInteractiveMapView
+import com.example.ui.components.OsmMarkerPoint
 import com.example.ui.components.PostCapturePreviewSheet
 import com.example.ui.components.RecapCalendarSheet
 import com.example.ui.components.RekapGalleryView
 import com.example.ui.components.bouncyPress
+import com.example.ui.components.openInGoogleMaps
 import com.example.ui.components.rememberBouncyScale
 import com.example.ui.components.rememberCameraCaptureController
 import com.example.ui.components.tapConfirm
 import com.example.ui.components.tapSoft
 import com.example.ui.components.tapTick
+import com.example.ui.theme.LocalAdaptiveSpec
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.MonoSmallStyle
 import java.io.File
@@ -98,6 +112,7 @@ import java.io.File
 private enum class RekapDisplayMode {
     CAMERA,
     GALLERY,
+    MAP,
 }
 
 @Composable
@@ -121,8 +136,11 @@ fun RekapScreen(
     onNotifyMessage: (String) -> Unit,
     onOverlayVisibilityChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    onUpdateRecapLocation: (dateIso: String, locationName: String, lat: Double, lng: Double) -> Unit = { _, _, _, _ -> },
 ) {
     val atmo = LocalAtmospherePalette.current
+    val spec = LocalAdaptiveSpec.current
+    val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val selectedDate = state.selectedRecapDateIso
     val todayIso = remember { DateTimeHelper.todayIso() }
@@ -141,7 +159,7 @@ fun RekapScreen(
     var pendingCaptureTimeLabel by remember { mutableStateOf("") }
     var pickerTargetDateIso by remember { mutableStateOf(selectedDate) }
 
-    BackHandler(enabled = displayMode == RekapDisplayMode.GALLERY && !showCalendarSheet && pendingCaptureUri == null) {
+    BackHandler(enabled = displayMode != RekapDisplayMode.CAMERA && !showCalendarSheet && pendingCaptureUri == null) {
         displayMode = RekapDisplayMode.CAMERA
     }
 
@@ -271,6 +289,9 @@ fun RekapScreen(
             onDeleteRecap = onDeleteRecap,
             onExportCollage = onExportCollage,
             onDismiss = { showCalendarSheet = false },
+            defaultLocationLat = state.currentLatitude,
+            defaultLocationLng = state.currentLongitude,
+            onUpdateRecapLocation = onUpdateRecapLocation,
         )
     }
 
@@ -298,14 +319,14 @@ fun RekapScreen(
             .padding(horizontal = 18.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Top Segmented Switch: Kamera <-> Grid Galeri
+        // Top Segmented Switch: Kamera <-> Galeri <-> Peta
         Surface(
             shape = RoundedCornerShape(999.dp),
             color = atmo.cardBg,
             border = BorderStroke(1.dp, atmo.cardBorder),
             modifier = Modifier
                 .fillMaxWidth()
-                .widthIn(max = 360.dp),
+                .widthIn(max = 420.dp),
         ) {
             Row(
                 modifier = Modifier
@@ -342,6 +363,21 @@ fun RekapScreen(
                     modifier = Modifier
                         .weight(1f)
                         .testTag("rekap_mode_gallery"),
+                )
+                RekapModeSegment(
+                    selected = displayMode == RekapDisplayMode.MAP,
+                    label = "Peta",
+                    icon = Icons.Filled.Map,
+                    badgeCount = null,
+                    accentColor = atmo.accentCobalt,
+                    onAccentColor = atmo.onAccentCobalt,
+                    onClick = {
+                        haptics.tapTick()
+                        displayMode = RekapDisplayMode.MAP
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("rekap_mode_map"),
                 )
             }
         }
@@ -794,7 +830,7 @@ fun RekapScreen(
                             }
                         }
 
-                        Spacer(Modifier.height(84.dp))
+                        Spacer(Modifier.height(spec.bottomNavClearance))
                     }
                 }
 
@@ -816,6 +852,27 @@ fun RekapScreen(
                         onOpenCalendarForDate = { targetDate ->
                             onSelectDate(targetDate)
                             showCalendarSheet = true
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+
+                RekapDisplayMode.MAP -> {
+                    RekapMapView(
+                        photoRecaps = state.photoRecaps,
+                        selectedDateIso = selectedDate,
+                        defaultLocationName = state.currentLocationName,
+                        defaultLocationLat = state.currentLatitude,
+                        defaultLocationLng = state.currentLongitude,
+                        bottomClearance = spec.bottomNavClearance,
+                        onSelectDate = onSelectDate,
+                        onOpenCalendarDetail = { targetDate ->
+                            onSelectDate(targetDate)
+                            showCalendarSheet = true
+                        },
+                        onUpdateRecapLocation = onUpdateRecapLocation,
+                        onJumpToCamera = {
+                            displayMode = RekapDisplayMode.CAMERA
                         },
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -860,7 +917,7 @@ private fun RekapModeSegment(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -868,19 +925,21 @@ private fun RekapModeSegment(
                 imageVector = icon,
                 contentDescription = null,
                 tint = fg,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(15.dp),
             )
-            Spacer(Modifier.width(6.dp))
+            Spacer(Modifier.width(4.dp))
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelLarge.copy(
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 12.sp,
                     fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
                 ),
                 color = fg,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (badgeCount != null) {
-                Spacer(Modifier.width(6.dp))
+                Spacer(Modifier.width(4.dp))
                 Surface(
                     shape = RoundedCornerShape(999.dp),
                     color = if (selected) onAccentColor.copy(alpha = 0.16f) else accentColor.copy(alpha = 0.18f),
@@ -889,10 +948,303 @@ private fun RekapModeSegment(
                         text = badgeCount.toString(),
                         style = MonoSmallStyle.copy(fontWeight = FontWeight.Bold),
                         color = if (selected) onAccentColor else accentColor,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
                     )
                 }
             }
         }
     }
 }
+
+@Composable
+private fun RekapMapView(
+    photoRecaps: Map<String, PhotoRecap>,
+    selectedDateIso: String,
+    defaultLocationName: String,
+    defaultLocationLat: Double?,
+    defaultLocationLng: Double?,
+    bottomClearance: androidx.compose.ui.unit.Dp,
+    onSelectDate: (String) -> Unit,
+    onOpenCalendarDetail: (String) -> Unit,
+    onUpdateRecapLocation: (dateIso: String, locationName: String, lat: Double, lng: Double) -> Unit,
+    onJumpToCamera: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val atmo = LocalAtmospherePalette.current
+    val context = LocalContext.current
+    val haptics = LocalHapticFeedback.current
+
+    val recapsWithPhotos = remember(photoRecaps) {
+        photoRecaps.values
+            .filter { it.imagePaths.isNotEmpty() || it.locationLat != null || it.locationName.isNotBlank() }
+            .sortedByDescending { it.dateIso }
+    }
+
+    var focusedDateIso by remember(selectedDateIso, recapsWithPhotos) {
+        mutableStateOf(
+            recapsWithPhotos.firstOrNull { it.dateIso == selectedDateIso }?.dateIso
+                ?: recapsWithPhotos.firstOrNull()?.dateIso
+                ?: selectedDateIso,
+        )
+    }
+    var showMovePinSheet by remember { mutableStateOf(false) }
+
+    val activeRecap = photoRecaps[focusedDateIso] ?: recapsWithPhotos.firstOrNull()
+    val fallbackLat = defaultLocationLat ?: DEFAULT_INDONESIA_LAT
+    val fallbackLng = defaultLocationLng ?: DEFAULT_INDONESIA_LNG
+
+    val resolvedLat = activeRecap?.locationLat ?: fallbackLat
+    val resolvedLng = activeRecap?.locationLng ?: fallbackLng
+    val isFallbackLocation = activeRecap?.locationLat == null || activeRecap.locationLng == null
+
+    if (showMovePinSheet && activeRecap != null) {
+        MapLocationPickerSheet(
+            initialLocationName = activeRecap.locationName.ifBlank { defaultLocationName },
+            initialLatitude = resolvedLat,
+            initialLongitude = resolvedLng,
+            onConfirmLocation = { name, lat, lng ->
+                onUpdateRecapLocation(activeRecap.dateIso, name, lat, lng)
+            },
+            onDismiss = { showMovePinSheet = false },
+        )
+    }
+
+    if (recapsWithPhotos.isEmpty()) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(bottom = bottomClearance)
+                .testTag("rekap_map_view"),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Surface(
+                color = atmo.cardBg,
+                shape = RoundedCornerShape(24.dp),
+                border = BorderStroke(1.dp, atmo.cardBorder),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Map,
+                        contentDescription = null,
+                        tint = atmo.accentMint,
+                        modifier = Modifier.size(44.dp),
+                    )
+                    Text(
+                        text = "Belum Ada Foto Rekap di Peta",
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White,
+                    )
+                    Text(
+                        text = "Ambil foto atau unggah dari galeri, lalu lihat titik lokasinya di peta dan Google Maps.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFCBD5E1),
+                    )
+                    BouncyButton(
+                        onClick = {
+                            haptics.tapSoft()
+                            onJumpToCamera()
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                    ) {
+                        Icon(Icons.Filled.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Buka Kamera Rekap")
+                    }
+                }
+            }
+        }
+        return
+    }
+
+    val markers = remember(recapsWithPhotos, focusedDateIso, fallbackLat, fallbackLng) {
+        recapsWithPhotos.mapIndexed { idx, recap ->
+            val lat = recap.locationLat ?: (fallbackLat + idx * 0.0004)
+            val lng = recap.locationLng ?: (fallbackLng + idx * 0.0004)
+            OsmMarkerPoint(
+                id = recap.dateIso,
+                title = recap.title.ifBlank { "Rekap ${DateTimeHelper.formatShortDate(recap.dateIso)}" },
+                subtitle = recap.locationName.ifBlank { defaultLocationName.ifBlank { "Lokasi Pengaturan" } },
+                latitude = lat,
+                longitude = lng,
+                isHighlighted = recap.dateIso == focusedDateIso,
+            )
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(bottom = bottomClearance)
+            .testTag("rekap_map_view"),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clip(RoundedCornerShape(22.dp))
+                .border(1.dp, atmo.cardBorder, RoundedCornerShape(22.dp)),
+        ) {
+            OsmInteractiveMapView(
+                centerLat = resolvedLat,
+                centerLng = resolvedLng,
+                zoomLevel = 13.5,
+                markers = markers,
+                onMarkerClick = { point ->
+                    haptics.tapSoft()
+                    focusedDateIso = point.id
+                    onSelectDate(point.id)
+                },
+                modifier = Modifier.fillMaxSize(),
+            )
+
+            Surface(
+                color = Color(0xCC0E121B),
+                shape = RoundedCornerShape(999.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(10.dp),
+            ) {
+                Text(
+                    text = "${recapsWithPhotos.size} momen di peta",
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                )
+            }
+        }
+
+        if (activeRecap != null) {
+            val thumbPath = activeRecap.imagePaths.firstOrNull { File(it).exists() }
+            Surface(
+                color = atmo.cardBg,
+                shape = RoundedCornerShape(20.dp),
+                border = BorderStroke(1.dp, atmo.cardBorder),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("rekap_map_selected_card"),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (thumbPath != null) {
+                            AsyncImage(
+                                model = File(thumbPath),
+                                contentDescription = "Foto rekap ${activeRecap.dateIso}",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(14.dp)),
+                            )
+                        } else {
+                            Surface(
+                                color = atmo.accentMint.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier.size(56.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Filled.PhotoLibrary, contentDescription = null, tint = atmo.accentMint)
+                                }
+                            }
+                        }
+
+                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(
+                                text = activeRecap.title.ifBlank { DateTimeHelper.formatIndonesianFullDate(activeRecap.dateIso) },
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = buildString {
+                                    append(activeRecap.locationName.ifBlank { defaultLocationName.ifBlank { "Jakarta, Indonesia" } })
+                                    if (isFallbackLocation) append(" (Perkiraan Pengaturan)")
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = atmo.accentMint,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Text(
+                                text = "${DateTimeHelper.formatShortDate(activeRecap.dateIso)} • ${activeRecap.imagePaths.size} foto",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color(0xFFCBD5E1),
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        BouncyOutlinedButton(
+                            onClick = {
+                                haptics.tapSoft()
+                                showMovePinSheet = true
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .minimumInteractiveComponentSize()
+                                .testTag("rekap_map_move_pin_button"),
+                        ) {
+                            Icon(Icons.Filled.LocationOn, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Geser Pin", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        BouncyOutlinedButton(
+                            onClick = {
+                                haptics.tapSoft()
+                                onOpenCalendarDetail(activeRecap.dateIso)
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .minimumInteractiveComponentSize()
+                                .testTag("rekap_map_detail_button"),
+                        ) {
+                            Text("Detail", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                        BouncyButton(
+                            onClick = {
+                                haptics.tapConfirm()
+                                openInGoogleMaps(
+                                    context = context,
+                                    latitude = resolvedLat,
+                                    longitude = resolvedLng,
+                                    label = activeRecap.locationName.ifBlank { "Rekap ${activeRecap.dateIso}" },
+                                )
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .weight(1.1f)
+                                .minimumInteractiveComponentSize()
+                                .testTag("rekap_map_google_maps_button"),
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Google Maps", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+

@@ -41,6 +41,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Cake
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Checklist
@@ -71,6 +72,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -78,6 +80,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.domain.AttendanceStatus
 import com.example.domain.ConflictInfo
 import com.example.domain.DateTimeHelper
@@ -87,6 +90,7 @@ import com.example.domain.StatusEvaluator
 import com.example.domain.TaskIconCatalog
 import com.example.domain.TaskStatus
 import com.example.domain.TaskWithStatus
+import com.example.ui.theme.LocalAdaptiveSpec
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.LocalStatusPalette
 import com.example.ui.theme.MonoSmallStyle
@@ -111,11 +115,13 @@ fun ScheduleTaskCard(
     val task = item.task
     val palette = LocalStatusPalette.current
     val atmo = LocalAtmospherePalette.current
+    val spec = LocalAdaptiveSpec.current
     val haptics = LocalHapticFeedback.current
     val statusColors = palette.colorsFor(item.status)
     val resolvedIcon = remember(task.iconKey, task.title) {
         TaskIconCatalog.resolveSpec(task.iconKey, task.title)
     }
+    val isBirthdayMiniCard = resolvedIcon.key == "cake"
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val durationInfo = remember(task, todayIso, nowMinuteOfDay) {
         StatusEvaluator.evaluateDurationProgress(task, todayIso, nowMinuteOfDay)
@@ -164,14 +170,18 @@ fun ScheduleTaskCard(
         animationSpec = tween(durationMillis = 260),
         label = "task_card_alpha_${task.id}",
     )
+    val birthdayAccent = Color(0xFFEC4899)
     val animatedAccentColor by animateColorAsState(
-        targetValue = statusColors.accent,
+        targetValue = if (isBirthdayMiniCard) birthdayAccent else statusColors.accent,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "task_accent_${task.id}",
     )
     val animatedBorderColor by animateColorAsState(
-        targetValue = (if (conflictInfo != null) palette.redAccent else statusColors.accent)
-            .copy(alpha = if (atmo.isDark) 0.55f else 0.42f),
+        targetValue = when {
+            conflictInfo != null -> palette.redAccent
+            isBirthdayMiniCard -> birthdayAccent
+            else -> statusColors.accent
+        }.copy(alpha = if (atmo.isDark) 0.58f else 0.45f),
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "task_border_${task.id}",
     )
@@ -204,7 +214,7 @@ fun ScheduleTaskCard(
         borderColor = animatedBorderColor,
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            val isCompactWidth = maxWidth < 330.dp
+            val isCompactWidth = maxWidth < 330.dp || spec.isUltraCompact
             val bodyStartPadding = if (isCompactWidth) 4.dp else 8.dp
             val bodyEndPadding = if (isCompactWidth) 8.dp else 12.dp
             val chipGap = if (isCompactWidth) 4.dp else 6.dp
@@ -274,6 +284,7 @@ fun ScheduleTaskCard(
                                 Text(
                                     text = task.title,
                                     style = MaterialTheme.typography.titleMedium.copy(
+                                        fontSize = (16f * spec.titleScaleFactor).sp,
                                         textDecoration = if (task.isCompleted) TextDecoration.LineThrough else TextDecoration.None,
                                     ),
                                     color = if (task.isCompleted) {
@@ -415,6 +426,32 @@ fun ScheduleTaskCard(
                             ) {
                             StatusBadge(status = item.status)
                             QuadrantChip(quadrant = task.quadrant)
+                            if (isBirthdayMiniCard) {
+                                Surface(
+                                    color = if (atmo.isDark) Color(0xFF500724) else Color(0xFFFCE7F3),
+                                    shape = RoundedCornerShape(12.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFEC4899).copy(alpha = 0.55f)),
+                                    modifier = Modifier.testTag("task_birthday_mini_badge_${task.id}"),
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Cake,
+                                            contentDescription = "Jadwal ulang tahun",
+                                            tint = if (atmo.isDark) Color(0xFFFBCFE8) else Color(0xFF9D174D),
+                                            modifier = Modifier.size(12.dp),
+                                        )
+                                        Text(
+                                            text = "Ulang Tahun",
+                                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                            color = if (atmo.isDark) Color(0xFFFBCFE8) else Color(0xFF9D174D),
+                                        )
+                                    }
+                                }
+                            }
                             if (!task.isCompleted && task.attendanceStatus == AttendanceStatus.CONFIRMED_ATTENDING) {
                                 Surface(
                                     color = palette.greenBg,

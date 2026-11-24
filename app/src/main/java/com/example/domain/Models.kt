@@ -2,10 +2,41 @@ package com.example.domain
 
 enum class MainTab(val label: String) {
     JADWAL("Jadwal"),
+    KALENDER("Kalender"),
     MATRIKS("Matriks"),
     FOKUS("Fokus"),
     REKAP("Rekap"),
     ANALITIK("Analitik"),
+}
+
+enum class RekapDisplayMode(val label: String) {
+    CAMERA("Kamera"),
+    GALLERY("Galeri"),
+    MAP("Peta"),
+}
+
+enum class PrayerCardVisibilityMode(
+    val labelId: String,
+    val descriptionId: String,
+) {
+    ONLY_ACTIVE_WINDOW(
+        labelId = "Saat Waktu Ibadah",
+        descriptionId = "Kartu hanya muncul saat masuk rentang waktu sholat/ibadah.",
+    ),
+    COMPACT_COUNTDOWN(
+        labelId = "Ringkas Hitung Mundur",
+        descriptionId = "Selalu tampil ringkas sebagai pengingat menuju waktu berikutnya.",
+    ),
+    ALWAYS_SHOW(
+        labelId = "Selalu Tampil",
+        descriptionId = "Selalu tampilkan kartu lengkap ibadah harian di Jadwal.",
+    );
+
+    companion object {
+        fun fromStoredName(raw: String?): PrayerCardVisibilityMode {
+            return entries.firstOrNull { it.name == raw } ?: ONLY_ACTIVE_WINDOW
+        }
+    }
 }
 
 enum class ScheduleScope(val label: String) {
@@ -72,6 +103,7 @@ enum class RecurrenceRule(val labelId: String) {
     DAILY("Tiap Hari"),
     WEEKLY("Tiap Minggu"),
     MONTHLY("Tiap Bulan"),
+    YEARLY("Tiap Tahun"),
 }
 
 enum class DurationCategory(val labelId: String) {
@@ -231,13 +263,72 @@ data class WorshipAnalyticsSummary(
     val weeklyTotalCount: Int get() = expectedThisWeek
 }
 
+data class WorshipActiveWindow(
+    val currentItem: WorshipScheduleItem? = null,
+    val windowStartMinute: Int = 0,
+    val windowEndMinute: Int = 0,
+    val nextItem: WorshipScheduleItem? = null,
+    val nextCountdownLabel: String = "",
+    val isWithinNaturalWindow: Boolean = false,
+    val todayItems: List<WorshipScheduleItem> = emptyList(),
+) {
+    val activeItem: WorshipScheduleItem? get() = currentItem
+    val isInActiveWindow: Boolean get() = isWithinNaturalWindow
+}
+
+data class WorshipHistoryDay(
+    val dateIso: String,
+    val items: List<WorshipScheduleItem>,
+    val isToday: Boolean = false,
+    val isEditable: Boolean = true,
+)
+
+data class PersonalBirthdayStats(
+    val userName: String = "",
+    val ageTurning: Int? = null,
+    val daysUsingApp: Int = 1,
+    val usageDurationLabel: String = "1 hari",
+    val totalCompletedTasks: Int = 0,
+    val totalFocusMinutes: Int = 0,
+    val totalPhotoRecaps: Int = 0,
+    val streakDays: Int = 0,
+    val birthDateIso: String = "",
+) {
+    val completedTasksCount: Int get() = totalCompletedTasks
+    val photoRecapsCount: Int get() = totalPhotoRecaps
+}
+
 data class HolidayInfo(
     val dateIso: String,
     val name: String,
     val isNationalHoliday: Boolean = true,
     val isCutiBersama: Boolean = false,
+    val isNationalObservance: Boolean = false,
+    val categoryLabel: String = "",
     val themeType: HolidayThemeType = HolidayThemeType.NONE,
     val bannerGreeting: String = "",
+)
+
+data class IndonesiaProvince(
+    val id: String,
+    val name: String,
+)
+
+data class IndonesiaRegency(
+    val id: String,
+    val provinceId: String,
+    val name: String,
+    val provinceName: String = "",
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+) {
+    val displayFullName: String
+        get() = if (provinceName.isNotBlank()) "$name, $provinceName" else name
+}
+
+data class MyQuranCity(
+    val id: String,
+    val lokasi: String,
 )
 
 data class NotificationLogEntry(
@@ -384,6 +475,13 @@ data class UserPreferences(
     val lastLocationName: String = "",
     val lastLatitude: Double? = null,
     val lastLongitude: Double? = null,
+    val birthDateIso: String = "",
+    val firstUsedAtEpochMs: Long = 0L,
+    val prayerCardVisibilityMode: PrayerCardVisibilityMode = PrayerCardVisibilityMode.ONLY_ACTIVE_WINDOW,
+    val allowMissedPrayerManualEdit: Boolean = true,
+    val lastHolidayMotionDateIso: String = "",
+    val lastBirthdayCelebrationYear: Int = 0,
+    val lastLoggedHolidayKey: String = "",
 )
 
 sealed interface DailyTimelineEntry {

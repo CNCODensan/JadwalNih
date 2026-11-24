@@ -95,6 +95,7 @@ class PriorityQuadrantWidget : GlanceAppWidget() {
                     latitude = userPrefs.lastLatitude,
                     longitude = userPrefs.lastLongitude,
                     completedKeys = completedWorshipKeys,
+                    locationName = userPrefs.lastLocationName,
                 )
             } else {
                 emptyList()
@@ -221,6 +222,8 @@ class ToggleWidgetTaskAction : ActionCallback {
                 recapDao = db.photoRecapDao(),
                 imageHelper = imageHelper,
                 backupManager = backupManager,
+                notificationLogDao = db.notificationLogDao(),
+                worshipCheckinDao = db.worshipCheckinDao(),
             )
             val nextRecurring = repo.toggleTaskComplete(task)
             val scheduler = ReminderScheduler(context)

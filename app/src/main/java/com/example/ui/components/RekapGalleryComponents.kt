@@ -352,7 +352,7 @@ fun RekapGalleryView(
         modifier = modifier
             .fillMaxSize()
             .testTag("rekap_gallery_view"),
-        contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(top = 4.dp, bottom = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // Gallery Summary & Filter Header

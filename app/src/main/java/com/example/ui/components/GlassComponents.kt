@@ -40,14 +40,20 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.domain.MainTab
+import com.example.ui.theme.AppThemeWallpaperLayer
+import com.example.ui.theme.LocalAdaptiveSpec
 import com.example.ui.theme.LocalAtmospherePalette
+import com.example.ui.theme.LocalHolidayThemeType
+import com.example.ui.theme.LocalIsBirthdayTheme
 
 @Composable
 fun AtmosphericBackground(
@@ -55,13 +61,21 @@ fun AtmosphericBackground(
     content: @Composable BoxScope.() -> Unit,
 ) {
     val atmo = LocalAtmospherePalette.current
+    val holidayTheme = LocalHolidayThemeType.current
+    val isBirthday = LocalIsBirthdayTheme.current
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
         Box(
             modifier = modifier
                 .fillMaxSize()
                 .background(atmo.bgTop),
-            content = content,
-        )
+        ) {
+            AppThemeWallpaperLayer(
+                holidayThemeType = holidayTheme,
+                isBirthdayTheme = isBirthday,
+                isDark = atmo.isDark,
+            )
+            content()
+        }
     }
 }
 
@@ -114,7 +128,12 @@ fun FloatingPillNavBar(
     visibleTabs: List<MainTab> = MainTab.entries,
 ) {
     val atmo = LocalAtmospherePalette.current
+    val spec = LocalAdaptiveSpec.current
     val pillShape = RoundedCornerShape(36.dp)
+    val outerHorizontal = if (spec.isUltraCompact) 8.dp else if (spec.isCompactWidth) 10.dp else 14.dp
+    val outerVertical = if (spec.isCompactWidth) 8.dp else 10.dp
+    val innerHorizontal = if (spec.isUltraCompact) 3.dp else 5.dp
+    val innerVertical = if (spec.isUltraCompact) 4.dp else 6.dp
 
     Box(
         modifier = modifier
@@ -122,7 +141,7 @@ fun FloatingPillNavBar(
             .windowInsetsPadding(
                 WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal),
             )
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = outerHorizontal, vertical = outerVertical),
         contentAlignment = Alignment.Center,
     ) {
         Surface(
@@ -136,7 +155,7 @@ fun FloatingPillNavBar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                    .padding(horizontal = innerHorizontal, vertical = innerVertical),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -157,7 +176,7 @@ fun FloatingPillNavBar(
                         label = "nav_color_${tab.name}",
                     )
                     val iconPopScale by animateFloatAsState(
-                        targetValue = if (selected) 1.14f else 1.0f,
+                        targetValue = if (selected) 1.12f else 1.0f,
                         animationSpec = spring(
                             dampingRatio = Spring.DampingRatioMediumBouncy,
                             stiffness = Spring.StiffnessMedium,
@@ -183,7 +202,7 @@ fun FloatingPillNavBar(
                                     onSelectTab(tab)
                                 },
                             )
-                            .padding(vertical = 7.dp, horizontal = 2.dp)
+                            .padding(vertical = if (spec.isUltraCompact) 6.dp else 7.dp, horizontal = 1.dp)
                             .testTag("nav_tab_${tab.name.lowercase()}"),
                         contentAlignment = Alignment.Center,
                     ) {
@@ -196,19 +215,22 @@ fun FloatingPillNavBar(
                                 contentDescription = tab.label,
                                 tint = contentColor,
                                 modifier = Modifier
-                                    .size(20.dp)
+                                    .size(spec.navIconSize)
                                     .graphicsLayer {
                                         scaleX = iconPopScale
                                         scaleY = iconPopScale
                                     },
                             )
+                            val fontScaleGuard = LocalDensity.current.fontScale.coerceIn(1f, 1.3f)
                             Text(
                                 text = tab.label,
                                 style = MaterialTheme.typography.labelSmall.copy(
+                                    fontSize = (spec.navLabelFontSizeSp / fontScaleGuard).sp,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                 ),
                                 color = contentColor,
                                 maxLines = 1,
+                                softWrap = false,
                                 overflow = TextOverflow.Ellipsis,
                             )
                         }

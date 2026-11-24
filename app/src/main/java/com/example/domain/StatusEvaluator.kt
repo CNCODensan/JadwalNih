@@ -66,6 +66,7 @@ object StatusEvaluator {
             RecurrenceRule.DAILY -> DateTimeHelper.addDays(currentDateIso, 1)
             RecurrenceRule.WEEKLY -> DateTimeHelper.addDays(currentDateIso, 7)
             RecurrenceRule.MONTHLY -> DateTimeHelper.addMonths(currentDateIso, 1)
+            RecurrenceRule.YEARLY -> DateTimeHelper.addYears(currentDateIso, 1)
         }
     }
 
@@ -112,6 +113,7 @@ object StatusEvaluator {
                             RecurrenceRule.WEEKLY -> guard
                             RecurrenceRule.DAILY -> (guard + 6) / 7
                             RecurrenceRule.MONTHLY -> 4
+                            RecurrenceRule.YEARLY -> 52
                             RecurrenceRule.NONE -> 0
                         }
                         foreshadows.add(

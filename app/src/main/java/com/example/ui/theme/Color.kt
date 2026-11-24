@@ -100,6 +100,7 @@ data class AtmospherePalette(
 ) {
     fun tabAccent(tab: MainTab): Pair<Color, Color> = when (tab) {
         MainTab.JADWAL -> accentCobalt to onAccentCobalt
+        MainTab.KALENDER -> accentSky to onAccentCobalt
         MainTab.MATRIKS -> accentCoral to onAccentCoral
         MainTab.FOKUS -> accentOrange to onAccentOrange
         MainTab.REKAP -> accentMint to onAccentMint

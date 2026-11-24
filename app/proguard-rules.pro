@@ -21,3 +21,8 @@
 #-renamesourcefileattribute SourceFile
 
 -keep class * implements androidx.glance.appwidget.action.ActionCallback { public <init>(); }
+-keep class org.osmdroid.** { *; }
+-dontwarn org.osmdroid.**
+-keepclassmembers class * extends androidx.room.RoomDatabase { <init>(); }
+-dontwarn kotlinx.coroutines.**
+-dontwarn java.lang.invoke.**

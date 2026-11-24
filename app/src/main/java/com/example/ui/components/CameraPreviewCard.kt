@@ -332,10 +332,13 @@ fun CameraXViewfinder(
                 val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
                 val executor = ContextCompat.getMainExecutor(context)
                 var boundProvider: ProcessCameraProvider? = null
+                var disposed = false
 
                 val listener = Runnable {
+                    if (disposed) return@Runnable
                     runCatching {
                         val provider = cameraProviderFuture.get()
+                        if (disposed) return@Runnable
                         boundProvider = provider
                         val desiredSelector = if (useFrontCamera) {
                             CameraSelector.DEFAULT_FRONT_CAMERA
@@ -393,6 +396,7 @@ fun CameraXViewfinder(
                 cameraProviderFuture.addListener(listener, executor)
 
                 onDispose {
+                    disposed = true
                     controller.isCameraReady = false
                     controller.imageCapture = null
                     controller.camera = null
@@ -673,7 +677,8 @@ fun CameraZoomControl(
                                     color = chipBg,
                                     modifier = Modifier
                                         .bouncyPress(chipInteraction, pressedScale = 0.90f)
-                                        .defaultMinSize(minWidth = 44.dp, minHeight = 40.dp)
+                                        .minimumInteractiveComponentSize()
+                                        .defaultMinSize(minWidth = 48.dp, minHeight = 40.dp)
                                         .testTag("camera_zoom_preset_$presetTagSuffix"),
                                 ) {
                                     Box(

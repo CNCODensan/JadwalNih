@@ -100,6 +100,7 @@ import com.example.ui.components.colorsFor
 import com.example.ui.components.tapConfirm
 import com.example.ui.components.tapSoft
 import com.example.ui.components.tapTick
+import com.example.ui.theme.LocalAdaptiveSpec
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.LocalStatusPalette
 import com.example.ui.theme.MonoSmallStyle
@@ -124,6 +125,7 @@ fun MatriksScreen(
     val todayIso = remember { DateTimeHelper.todayIso() }
     val statusPalette = LocalStatusPalette.current
     val atmo = LocalAtmospherePalette.current
+    val spec = LocalAdaptiveSpec.current
     val haptics = LocalHapticFeedback.current
 
     val hourlyEntries = remember(state.matrixTasks, state.matrixScope) {
@@ -148,7 +150,12 @@ fun MatriksScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(
+            start = spec.screenHorizontalPadding,
+            end = spec.screenHorizontalPadding,
+            top = 8.dp,
+            bottom = spec.fabContentClearance,
+        ),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item(key = "matrix_header") {
@@ -889,6 +896,10 @@ private fun SyncedMonthlyCalendarCard(
     val haptics = LocalHapticFeedback.current
     val palette = LocalStatusPalette.current
     val cells = remember(visibleMonthAnchor) { DateTimeHelper.monthGridCells(visibleMonthAnchor) }
+    val tasksByDate = remember(tasks) { tasks.groupBy { it.task.dateIso } }
+    val existingThumbsByDate = remember(photoRecaps) {
+        photoRecaps.mapValues { (_, r) -> r.imagePaths.firstOrNull { File(it).exists() } }
+    }
 
     FrostedGlassCard(cornerRadius = 18.dp) {
         Column(
@@ -964,9 +975,8 @@ private fun SyncedMonthlyCalendarCard(
                             Spacer(modifier = Modifier.weight(1f).aspectRatio(0.88f))
                         } else {
                             val cellDate = cell.dateIso
-                            val recap = photoRecaps[cellDate]
-                            val thumbPath = recap?.imagePaths?.firstOrNull()?.takeIf { File(it).exists() }
-                            val dayTasks = tasks.filter { it.task.dateIso == cellDate }
+                            val thumbPath = existingThumbsByDate[cellDate]
+                            val dayTasks = tasksByDate[cellDate].orEmpty()
                             val isSelected = cellDate == selectedDateIso
                             val isToday = cellDate == todayIso
                             val shape = RoundedCornerShape(12.dp)

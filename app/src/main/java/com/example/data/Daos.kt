@@ -15,6 +15,9 @@ interface ScheduleTaskDao {
     @Query("SELECT * FROM schedule_tasks ORDER BY dateIso ASC, startMinuteOfDay ASC")
     suspend fun getAllTasksOnce(): List<ScheduleTaskEntity>
 
+    @Query("SELECT * FROM schedule_tasks WHERE id = :taskId LIMIT 1")
+    suspend fun getTaskByIdOnce(taskId: Long): ScheduleTaskEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTask(task: ScheduleTaskEntity): Long
 

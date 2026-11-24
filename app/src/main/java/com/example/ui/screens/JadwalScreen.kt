@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.GridView
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Timer
@@ -86,6 +87,7 @@ import com.example.domain.TaskStatus
 import com.example.domain.TaskWithStatus
 import com.example.domain.WorshipScheduleItem
 import com.example.ui.JadwalNihUiState
+import com.example.ui.components.BirthdayTodayMiniCard
 import com.example.ui.components.BouncyButton
 import com.example.ui.components.BouncyFilterChip
 import com.example.ui.components.BouncyIconButton
@@ -107,6 +109,7 @@ import com.example.ui.components.tapConfirm
 import com.example.ui.components.tapSoft
 import com.example.ui.components.tapTick
 import com.example.ui.theme.HolidayScheduleWatermarkOverlay
+import com.example.ui.theme.LocalAdaptiveSpec
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.LocalStatusPalette
 import com.example.ui.theme.MonoSmallStyle
@@ -143,10 +146,14 @@ fun JadwalScreen(
     onToggleWorshipComplete: (WorshipScheduleItem) -> Unit = {},
     onActivateForeshadowEarly: (ForeshadowOccurrence) -> Unit = {},
     onSkipForeshadow: (ForeshadowOccurrence) -> Unit = {},
+    onOpenWorshipHistory: () -> Unit = {},
+    onReplayHolidayMotion: () -> Unit = {},
+    onOpenBirthdayCelebration: () -> Unit = {},
 ) {
     val todayIso = state.currentDateIso.ifBlank { DateTimeHelper.todayIso() }
     val statusPalette = LocalStatusPalette.current
     val atmo = LocalAtmospherePalette.current
+    val spec = LocalAdaptiveSpec.current
     val haptics = LocalHapticFeedback.current
 
     var pendingConfirmDiscardDraft by remember { mutableStateOf(false) }
@@ -204,17 +211,19 @@ fun JadwalScreen(
         }
     }
 
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val horizontalPad = if (maxWidth < 360.dp) 10.dp else 16.dp
+    Box(modifier = modifier.fillMaxSize()) {
+        HolidayScheduleWatermarkOverlay(themeType = state.activeHolidayTheme)
 
-        Box(modifier = Modifier.fillMaxSize()) {
-            HolidayScheduleWatermarkOverlay(themeType = state.activeHolidayTheme)
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = horizontalPad, end = horizontalPad, top = 4.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                start = spec.screenHorizontalPadding,
+                end = spec.screenHorizontalPadding,
+                top = 4.dp,
+                bottom = spec.fabContentClearance,
+            ),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
         // 1. Info-only Quick Glance Hero Card (tappable to jump to Analitik / Matriks in Normal Mode)
         item(key = "quick_glance") {
             RingkasanCepatCard(
@@ -224,6 +233,17 @@ fun JadwalScreen(
                 isSimpleMode = state.isSimpleMode,
                 onCardClick = onQuickGlanceClick,
             )
+        }
+
+        // 1a. Birthday Celebration Mini Card (shown when today matches user's birthday)
+        if (state.isUserBirthdayToday) {
+            item(key = "birthday_today_mini") {
+                BirthdayTodayMiniCard(
+                    userName = state.userName,
+                    stats = state.personalBirthdayStats,
+                    onOpenCelebration = onOpenBirthdayCelebration,
+                )
+            }
         }
 
         // 1b. v1.0 Welcome Card (shown once for new onboarded users, easily dismissible)
@@ -240,6 +260,7 @@ fun JadwalScreen(
                 HolidayGreetingBanner(
                     holiday = activeHoliday,
                     themeType = state.activeHolidayTheme,
+                    onReplayMotion = onReplayHolidayMotion,
                 )
             }
         }
@@ -703,7 +724,7 @@ fun JadwalScreen(
             }
         }
 
-        // 3c. Worship / Prayer Schedule Card (5 Waktu Sholat or Religion-specific schedule)
+        // 3c. Worship / Prayer Schedule Card (strictly gated by active window in ONLY_ACTIVE_WINDOW mode)
         if (state.prayerReminderEnabled && state.todayWorshipItems.isNotEmpty()) {
             item(key = "worship_schedule_card") {
                 WorshipScheduleCard(
@@ -713,6 +734,9 @@ fun JadwalScreen(
                     countdownLabel = state.nextWorshipCountdown,
                     locationName = state.currentLocationName,
                     onToggleComplete = onToggleWorshipComplete,
+                    visibilityMode = state.prayerCardVisibilityMode,
+                    activeWindow = state.activeWorshipWindow,
+                    onOpenHistory = onOpenWorshipHistory,
                 )
             }
         }
@@ -987,10 +1011,35 @@ fun JadwalScreen(
         }
 
         item(key = "status_filters") {
-            StatusFilterRow(
-                selectedStatus = state.statusFilter,
-                onSelectStatus = onSelectStatusFilter,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                if (state.prayerReminderEnabled && state.todayWorshipItems.isNotEmpty()) {
+                    BouncyOutlinedButton(
+                        onClick = {
+                            haptics.tapSoft()
+                            onOpenWorshipHistory()
+                        },
+                        shape = RoundedCornerShape(14.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("jadwal_open_worship_history_chip"),
+                    ) {
+                        Icon(Icons.Filled.History, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Ibadah 7 Hari", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                    }
+                }
+                Box(modifier = Modifier.weight(1f)) {
+                    StatusFilterRow(
+                        selectedStatus = state.statusFilter,
+                        onSelectStatus = onSelectStatusFilter,
+                    )
+                }
+            }
         }
 
         if (state.filteredScheduleTasks.isEmpty() && visibleForeshadows.isEmpty()) {
@@ -1085,7 +1134,6 @@ fun JadwalScreen(
                     modifier = Modifier.animateItem(),
                 )
             }
-        }
         }
         }
     }

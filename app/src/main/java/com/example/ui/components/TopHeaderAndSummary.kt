@@ -58,6 +58,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.domain.DateTimeHelper
 import com.example.domain.GreetingState
@@ -65,6 +66,7 @@ import com.example.domain.HolidayThemeType
 import com.example.domain.QuickGlanceSummary
 import com.example.domain.QuickGlanceTarget
 import com.example.ui.theme.HolidayHeaderOrnament
+import com.example.ui.theme.LocalAdaptiveSpec
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.MonoSmallStyle
 
@@ -77,6 +79,7 @@ fun JadwalNihTopBar(
     onOpenNotifications: () -> Unit = {},
 ) {
     val atmo = LocalAtmospherePalette.current
+    val spec = LocalAdaptiveSpec.current
     val haptics = LocalHapticFeedback.current
     val settingsInteraction = remember { MutableInteractionSource() }
     val notifInteraction = remember { MutableInteractionSource() }
@@ -87,20 +90,23 @@ fun JadwalNihTopBar(
             .windowInsetsPadding(
                 WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
             )
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(
+                horizontal = spec.screenHorizontalPadding,
+                vertical = if (spec.isUltraCompact) 8.dp else 10.dp,
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (spec.isUltraCompact) 8.dp else 10.dp),
             modifier = Modifier.weight(1f),
         ) {
             Image(
                 painter = painterResource(id = R.drawable.app_brand_icon),
                 contentDescription = "Ikon JadwalNih",
                 modifier = Modifier
-                    .size(40.dp)
+                    .size(if (spec.isUltraCompact) 36.dp else 40.dp)
                     .clip(RoundedCornerShape(14.dp)),
             )
             Column {
@@ -110,8 +116,12 @@ fun JadwalNihTopBar(
                 ) {
                     Text(
                         text = "JadwalNih",
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontSize = (21f * spec.titleScaleFactor).sp,
+                        ),
                         color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                     )
                     HolidayHeaderOrnament(themeType = holidayThemeType)
                 }
@@ -213,6 +223,7 @@ fun RingkasanCepatCard(
     isSimpleMode: Boolean = false,
 ) {
     val atmo = LocalAtmospherePalette.current
+    val spec = LocalAdaptiveSpec.current
     val haptics = LocalHapticFeedback.current
     val shape = RoundedCornerShape(26.dp)
     val rawFraction = if (summary.todayTotalCount == 0) {
@@ -234,6 +245,193 @@ fun RingkasanCepatCard(
         label = "hero_percent",
     )
     val cardInteraction = remember { MutableInteractionSource() }
+
+    val heroTextBlock: @Composable () -> Unit = {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = greeting.greetingText,
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
+                color = atmo.heroOnPrimary.copy(alpha = 0.94f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = when {
+                    summary.todayTotalCount == 0 -> "Belum ada agenda"
+                    summary.nextTaskTitle != null -> summary.nextTaskTitle
+                    else -> "Hari ini beres!"
+                },
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    fontSize = (16f * spec.titleScaleFactor).sp,
+                ),
+                color = atmo.heroOnPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = greeting.encouragementText,
+                style = MaterialTheme.typography.bodySmall,
+                color = atmo.heroOnPrimary.copy(alpha = 0.84f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+
+    val heroChipsBlock: @Composable () -> Unit = {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Surface(
+                color = atmo.heroSubtleBg,
+                shape = RoundedCornerShape(999.dp),
+            ) {
+                Text(
+                    text = when {
+                        summary.todayTotalCount == 0 -> "0 agenda"
+                        summary.nextTaskTimeLabel != null -> summary.nextTaskTimeLabel
+                        else -> "${summary.todayActiveOrUpcomingCount} tersisa"
+                    },
+                    style = MonoSmallStyle,
+                    color = atmo.heroOnPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                )
+            }
+            if (summary.streakDays >= 1) {
+                val streakScale = remember { Animatable(1f) }
+                LaunchedEffect(summary.streakDays) {
+                    streakScale.snapTo(1.12f)
+                    streakScale.animateTo(
+                        targetValue = 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium,
+                        ),
+                    )
+                }
+                Surface(
+                    color = atmo.accentAmber,
+                    shape = RoundedCornerShape(999.dp),
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = streakScale.value
+                        scaleY = streakScale.value
+                    },
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.LocalFireDepartment,
+                            contentDescription = "Streak produktif",
+                            tint = atmo.onAccentAmber,
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Text(
+                            text = "Streak ${summary.streakDays} Hari",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = atmo.onAccentAmber,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+            if (summary.urgentOrCriticalCount > 0) {
+                val urgentScale = remember { Animatable(1f) }
+                LaunchedEffect(summary.urgentOrCriticalCount) {
+                    urgentScale.snapTo(1.12f)
+                    urgentScale.animateTo(
+                        targetValue = 1f,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMedium,
+                        ),
+                    )
+                }
+                Surface(
+                    color = atmo.accentCoral,
+                    shape = RoundedCornerShape(999.dp),
+                    modifier = Modifier.graphicsLayer {
+                        scaleX = urgentScale.value
+                        scaleY = urgentScale.value
+                    },
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.WarningAmber,
+                            contentDescription = "Prioritas mendesak",
+                            tint = atmo.onAccentCoral,
+                            modifier = Modifier.size(13.dp),
+                        )
+                        Text(
+                            text = "${summary.urgentOrCriticalCount} Mendesak",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                            color = atmo.onAccentCoral,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    val heroProgressRing: @Composable () -> Unit = {
+        Box(
+            modifier = Modifier.size(spec.summaryRingSize),
+            contentAlignment = Alignment.Center,
+        ) {
+            val gaugeColor by animateColorAsState(
+                targetValue = if (rawFraction >= 0.999f) atmo.accentMint else atmo.accentAmber,
+                animationSpec = spring(stiffness = Spring.StiffnessLow),
+                label = "hero_gauge_color",
+            )
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val stroke = (if (spec.isUltraCompact) 5.5.dp else 7.dp).toPx()
+                drawArc(
+                    color = Color.White.copy(alpha = 0.24f),
+                    startAngle = 0f,
+                    sweepAngle = 360f,
+                    useCenter = false,
+                    style = Stroke(width = stroke),
+                )
+                drawArc(
+                    color = gaugeColor,
+                    startAngle = -90f,
+                    sweepAngle = 360f * animatedFraction,
+                    useCenter = false,
+                    style = Stroke(width = stroke, cap = StrokeCap.Round),
+                )
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "$animatedPercent%",
+                    style = MonoSmallStyle.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize = if (spec.isUltraCompact) 11.sp else MonoSmallStyle.fontSize,
+                    ),
+                    color = Color.White,
+                )
+                Text(
+                    text = "${summary.todayCompletedCount}/${summary.todayTotalCount}",
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = if (spec.isUltraCompact) 9.5.sp else MaterialTheme.typography.labelSmall.fontSize,
+                    ),
+                    color = Color.White.copy(alpha = 0.85f),
+                )
+            }
+        }
+    }
 
     Surface(
         modifier = modifier
@@ -263,183 +461,37 @@ fun RingkasanCepatCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(spec.cardPadding),
+            verticalArrangement = Arrangement.spacedBy(spec.cardInnerSpacing),
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
+            if (spec.isUltraCompact) {
+                heroTextBlock()
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        text = greeting.greetingText,
-                        style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.Bold),
-                        color = atmo.heroOnPrimary.copy(alpha = 0.94f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = when {
-                            summary.todayTotalCount == 0 -> "Belum ada agenda"
-                            summary.nextTaskTitle != null -> summary.nextTaskTitle
-                            else -> "Hari ini beres!"
-                        },
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = atmo.heroOnPrimary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = greeting.encouragementText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = atmo.heroOnPrimary.copy(alpha = 0.84f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    Box(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+                        heroChipsBlock()
+                    }
+                    heroProgressRing()
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(end = 10.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
-                        Surface(
-                            color = atmo.heroSubtleBg,
-                            shape = RoundedCornerShape(999.dp),
-                        ) {
-                            Text(
-                                text = when {
-                                    summary.todayTotalCount == 0 -> "0 agenda"
-                                    summary.nextTaskTimeLabel != null -> summary.nextTaskTimeLabel
-                                    else -> "${summary.todayActiveOrUpcomingCount} tersisa"
-                                },
-                                style = MonoSmallStyle,
-                                color = atmo.heroOnPrimary,
-                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                            )
-                        }
-                        if (summary.streakDays >= 1) {
-                            val streakScale = remember { Animatable(1f) }
-                            LaunchedEffect(summary.streakDays) {
-                                streakScale.snapTo(1.12f)
-                                streakScale.animateTo(
-                                    targetValue = 1f,
-                                    animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                        stiffness = Spring.StiffnessMedium,
-                                    ),
-                                )
-                            }
-                            Surface(
-                                color = atmo.accentAmber,
-                                shape = RoundedCornerShape(999.dp),
-                                modifier = Modifier.graphicsLayer {
-                                    scaleX = streakScale.value
-                                    scaleY = streakScale.value
-                                },
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Filled.LocalFireDepartment,
-                                        contentDescription = "Streak produktif",
-                                        tint = atmo.onAccentAmber,
-                                        modifier = Modifier.size(13.dp),
-                                    )
-                                    Text(
-                                        text = "Streak ${summary.streakDays} Hari",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = atmo.onAccentAmber,
-                                    )
-                                }
-                            }
-                        }
-                        if (summary.urgentOrCriticalCount > 0) {
-                            val urgentScale = remember { Animatable(1f) }
-                            LaunchedEffect(summary.urgentOrCriticalCount) {
-                                urgentScale.snapTo(1.12f)
-                                urgentScale.animateTo(
-                                    targetValue = 1f,
-                                    animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                        stiffness = Spring.StiffnessMedium,
-                                    ),
-                                )
-                            }
-                            Surface(
-                                color = atmo.accentCoral,
-                                shape = RoundedCornerShape(999.dp),
-                                modifier = Modifier.graphicsLayer {
-                                    scaleX = urgentScale.value
-                                    scaleY = urgentScale.value
-                                },
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.WarningAmber,
-                                        contentDescription = "Prioritas mendesak",
-                                        tint = atmo.onAccentCoral,
-                                        modifier = Modifier.size(13.dp),
-                                    )
-                                    Text(
-                                        text = "${summary.urgentOrCriticalCount} Mendesak",
-                                        style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = atmo.onAccentCoral,
-                                    )
-                                }
-                            }
-                        }
+                        heroTextBlock()
+                        heroChipsBlock()
                     }
-                }
-
-                Box(
-                    modifier = Modifier.size(78.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    val gaugeColor by animateColorAsState(
-                        targetValue = if (rawFraction >= 0.999f) atmo.accentMint else atmo.accentAmber,
-                        animationSpec = spring(stiffness = Spring.StiffnessLow),
-                        label = "hero_gauge_color",
-                    )
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        val stroke = 7.dp.toPx()
-                        drawArc(
-                            color = Color.White.copy(alpha = 0.24f),
-                            startAngle = 0f,
-                            sweepAngle = 360f,
-                            useCenter = false,
-                            style = Stroke(width = stroke),
-                        )
-                        drawArc(
-                            color = gaugeColor,
-                            startAngle = -90f,
-                            sweepAngle = 360f * animatedFraction,
-                            useCenter = false,
-                            style = Stroke(width = stroke, cap = StrokeCap.Round),
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = "$animatedPercent%",
-                            style = MonoSmallStyle.copy(fontWeight = FontWeight.Bold),
-                            color = Color.White,
-                        )
-                        Text(
-                            text = "${summary.todayCompletedCount}/${summary.todayTotalCount}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.85f),
-                        )
-                    }
+                    heroProgressRing()
                 }
             }
 

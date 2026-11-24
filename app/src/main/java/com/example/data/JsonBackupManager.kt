@@ -4,6 +4,7 @@ import android.content.Context
 import android.net.Uri
 import com.example.domain.AttendanceStatus
 import com.example.domain.DateTimeHelper
+import com.example.domain.PrayerCardVisibilityMode
 import com.example.domain.PriorityQuadrant
 import com.example.domain.RecurrenceRule
 import com.example.domain.ReligionOption
@@ -59,7 +60,7 @@ class JsonBackupManager(
             val root = JSONObject().apply {
                 put("app", "JadwalNih")
                 put("format", "jadwalnih-backup")
-                put("version", 4)
+                put("version", 5)
                 put("exportedAtEpochMs", System.currentTimeMillis())
                 put(
                     "tasks",
@@ -188,6 +189,10 @@ class JsonBackupManager(
                             put("lastLocationName", prefs.lastLocationName)
                             put("lastLatitude", prefs.lastLatitude ?: JSONObject.NULL)
                             put("lastLongitude", prefs.lastLongitude ?: JSONObject.NULL)
+                            put("birthDateIso", prefs.birthDateIso)
+                            put("firstUsedAtEpochMs", prefs.firstUsedAtEpochMs)
+                            put("prayerCardVisibilityMode", prefs.prayerCardVisibilityMode.name)
+                            put("allowMissedPrayerManualEdit", prefs.allowMissedPrayerManualEdit)
                         },
                     )
                 }
@@ -608,6 +613,25 @@ class JsonBackupManager(
                 val lat = if (prefsObj.isNull("lastLatitude")) null else prefsObj.optDouble("lastLatitude")
                 val lng = if (prefsObj.isNull("lastLongitude")) null else prefsObj.optDouble("lastLongitude")
                 prefsStore.setLastLocation(locName, lat, lng)
+            }
+            if (prefsObj.has("birthDateIso")) {
+                prefsStore.setBirthDateIso(prefsObj.optString("birthDateIso", "").trim())
+            }
+            if (prefsObj.has("firstUsedAtEpochMs")) {
+                val firstUsed = prefsObj.optLong("firstUsedAtEpochMs", 0L)
+                if (firstUsed > 0L) {
+                    prefsStore.setFirstUsedAtEpochMs(firstUsed)
+                }
+            }
+            if (prefsObj.has("prayerCardVisibilityMode")) {
+                prefsStore.setPrayerCardVisibilityMode(
+                    PrayerCardVisibilityMode.fromStoredName(prefsObj.optString("prayerCardVisibilityMode")),
+                )
+            }
+            if (prefsObj.has("allowMissedPrayerManualEdit")) {
+                prefsStore.setAllowMissedPrayerManualEdit(
+                    prefsObj.optBoolean("allowMissedPrayerManualEdit", true),
+                )
             }
         }
 

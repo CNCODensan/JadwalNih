@@ -7,10 +7,13 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.doublePreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.domain.DateTimeHelper
 import com.example.domain.HolidayThemeType
+import com.example.domain.PrayerCardVisibilityMode
 import com.example.domain.PriorityQuadrant
 import com.example.domain.QuickGlanceTarget
 import com.example.domain.RecurrenceRule
@@ -51,6 +54,14 @@ class UserPreferencesStore(private val context: Context) {
         val LAST_LOCATION_NAME = stringPreferencesKey("last_location_name")
         val LAST_LATITUDE = doublePreferencesKey("last_latitude")
         val LAST_LONGITUDE = doublePreferencesKey("last_longitude")
+
+        val BIRTH_DATE_ISO = stringPreferencesKey("birth_date_iso")
+        val FIRST_USED_AT_EPOCH_MS = longPreferencesKey("first_used_at_epoch_ms")
+        val PRAYER_CARD_VISIBILITY_MODE = stringPreferencesKey("prayer_card_visibility_mode")
+        val ALLOW_MISSED_PRAYER_MANUAL_EDIT = booleanPreferencesKey("allow_missed_prayer_manual_edit")
+        val LAST_HOLIDAY_MOTION_DATE_ISO = stringPreferencesKey("last_holiday_motion_date_iso")
+        val LAST_BIRTHDAY_CELEBRATION_YEAR = intPreferencesKey("last_birthday_celebration_year")
+        val LAST_LOGGED_HOLIDAY_KEY = stringPreferencesKey("last_logged_holiday_key")
     }
 
     val preferencesFlow: Flow<UserPreferences> = context.settingsDataStore.data
@@ -96,6 +107,15 @@ class UserPreferencesStore(private val context: Context) {
                 lastLocationName = prefs[Keys.LAST_LOCATION_NAME].orEmpty(),
                 lastLatitude = prefs[Keys.LAST_LATITUDE],
                 lastLongitude = prefs[Keys.LAST_LONGITUDE],
+                birthDateIso = prefs[Keys.BIRTH_DATE_ISO].orEmpty(),
+                firstUsedAtEpochMs = prefs[Keys.FIRST_USED_AT_EPOCH_MS] ?: 0L,
+                prayerCardVisibilityMode = PrayerCardVisibilityMode.fromStoredName(
+                    prefs[Keys.PRAYER_CARD_VISIBILITY_MODE],
+                ),
+                allowMissedPrayerManualEdit = prefs[Keys.ALLOW_MISSED_PRAYER_MANUAL_EDIT] ?: true,
+                lastHolidayMotionDateIso = prefs[Keys.LAST_HOLIDAY_MOTION_DATE_ISO].orEmpty(),
+                lastBirthdayCelebrationYear = prefs[Keys.LAST_BIRTHDAY_CELEBRATION_YEAR] ?: 0,
+                lastLoggedHolidayKey = prefs[Keys.LAST_LOGGED_HOLIDAY_KEY].orEmpty(),
             )
         }
 
@@ -188,6 +208,44 @@ class UserPreferencesStore(private val context: Context) {
         }
     }
 
+    suspend fun setBirthDateIso(birthDateIso: String) {
+        context.settingsDataStore.edit { it[Keys.BIRTH_DATE_ISO] = birthDateIso.trim().take(10) }
+    }
+
+    suspend fun ensureFirstUsedAtEpochMs(nowEpochMs: Long = System.currentTimeMillis()) {
+        context.settingsDataStore.edit { prefs ->
+            val current = prefs[Keys.FIRST_USED_AT_EPOCH_MS] ?: 0L
+            if (current <= 0L) {
+                prefs[Keys.FIRST_USED_AT_EPOCH_MS] = nowEpochMs
+            }
+        }
+    }
+
+    suspend fun setFirstUsedAtEpochMs(epochMs: Long) {
+        if (epochMs <= 0L) return
+        context.settingsDataStore.edit { it[Keys.FIRST_USED_AT_EPOCH_MS] = epochMs }
+    }
+
+    suspend fun setPrayerCardVisibilityMode(mode: PrayerCardVisibilityMode) {
+        context.settingsDataStore.edit { it[Keys.PRAYER_CARD_VISIBILITY_MODE] = mode.name }
+    }
+
+    suspend fun setAllowMissedPrayerManualEdit(allowed: Boolean) {
+        context.settingsDataStore.edit { it[Keys.ALLOW_MISSED_PRAYER_MANUAL_EDIT] = allowed }
+    }
+
+    suspend fun setLastHolidayMotionDateIso(dateIso: String) {
+        context.settingsDataStore.edit { it[Keys.LAST_HOLIDAY_MOTION_DATE_ISO] = dateIso.trim().take(10) }
+    }
+
+    suspend fun setLastBirthdayCelebrationYear(year: Int) {
+        context.settingsDataStore.edit { it[Keys.LAST_BIRTHDAY_CELEBRATION_YEAR] = year }
+    }
+
+    suspend fun setLastLoggedHolidayKey(key: String) {
+        context.settingsDataStore.edit { it[Keys.LAST_LOGGED_HOLIDAY_KEY] = key.trim().take(160) }
+    }
+
     suspend fun saveDraft(draft: TaskDraft?) {
         context.settingsDataStore.edit { prefs ->
             if (draft == null) {
@@ -217,7 +275,10 @@ class UserPreferencesStore(private val context: Context) {
     }
 
     suspend fun resetPreferences() {
-        context.settingsDataStore.edit { it.clear() }
+        context.settingsDataStore.edit { prefs ->
+            prefs.clear()
+            prefs[Keys.FIRST_USED_AT_EPOCH_MS] = System.currentTimeMillis()
+        }
     }
 
     companion object {
@@ -249,8 +310,13 @@ class UserPreferencesStore(private val context: Context) {
             if (raw.isNullOrBlank()) return null
             return runCatching {
                 val obj = JSONObject(raw)
+                val editingId = if (obj.has("editingTaskId") && !obj.isNull("editingTaskId")) {
+                    obj.optLong("editingTaskId").takeIf { it > 0L }
+                } else {
+                    null
+                }
                 TaskDraft(
-                    editingTaskId = if (obj.has("editingTaskId")) obj.optLong("editingTaskId") else null,
+                    editingTaskId = editingId,
                     title = obj.optString("title", ""),
                     dateIso = obj.optString("dateIso", DateTimeHelper.todayIso()),
                     startMinuteOfDay = obj.optInt("startMinuteOfDay", 9 * 60),

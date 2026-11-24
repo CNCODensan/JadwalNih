@@ -52,8 +52,11 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.MyLocation
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.outlined.WarningAmber
@@ -87,6 +90,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -110,6 +114,7 @@ import com.example.domain.ScheduleTask
 import com.example.domain.SubTaskItem
 import com.example.domain.TaskDraft
 import com.example.domain.TaskIconCatalog
+import com.example.notifications.ReminderScheduler
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.LocalStatusPalette
 import com.example.ui.theme.MonoSmallStyle
@@ -230,6 +235,8 @@ fun TaskEditorSheet(
     var validationShakeTrigger by remember { mutableIntStateOf(0) }
     var showDatePicker by remember { mutableStateOf(false) }
     var showIconPicker by remember { mutableStateOf(false) }
+    var showRegionPicker by remember { mutableStateOf(false) }
+    var showMapPicker by remember { mutableStateOf(false) }
     var iconPickerTargetAiIdx by remember { mutableStateOf<Int?>(null) }
     var pendingDeleteSubtaskId by remember { mutableStateOf<String?>(null) }
     var pendingAiConflicts by remember { mutableStateOf<List<AiBatchScheduleParser.ImportedConflictItem>?>(null) }
@@ -327,6 +334,8 @@ fun TaskEditorSheet(
         isOtomatisTab,
         iconKey,
         locationName,
+        locationLat,
+        locationLng,
     ) {
         if (initialTask == null) {
             onDraftChanged(buildCurrentDraft())
@@ -374,6 +383,31 @@ fun TaskEditorSheet(
                 showIconPicker = false
                 iconPickerTargetAiIdx = null
             },
+        )
+    }
+
+    if (showRegionPicker) {
+        IndonesiaRegionPickerSheet(
+            onSelectRegency = { regency ->
+                locationName = regency.displayFullName
+                locationLat = regency.latitude
+                locationLng = regency.longitude
+            },
+            onDismiss = { showRegionPicker = false },
+        )
+    }
+
+    if (showMapPicker) {
+        MapLocationPickerSheet(
+            initialLocationName = locationName.ifBlank { defaultLocationName },
+            initialLatitude = locationLat ?: defaultLocationLat,
+            initialLongitude = locationLng ?: defaultLocationLng,
+            onConfirmLocation = { pickedName, lat, lng ->
+                locationName = pickedName
+                locationLat = lat
+                locationLng = lng
+            },
+            onDismiss = { showMapPicker = false },
         )
     }
 
@@ -886,6 +920,7 @@ fun TaskEditorSheet(
                                                                     shape = RoundedCornerShape(10.dp),
                                                                     modifier = Modifier
                                                                         .size(40.dp)
+                                                                        .minimumInteractiveComponentSize()
                                                                         .testTag("ai_preview_icon_$idx"),
                                                                 ) {
                                                                     Box(contentAlignment = Alignment.Center) {
@@ -942,7 +977,9 @@ fun TaskEditorSheet(
                                                                         ).show()
                                                                     },
                                                                     shape = RoundedCornerShape(10.dp),
-                                                                    modifier = Modifier.weight(1f),
+                                                                    modifier = Modifier
+                                                                        .weight(1f)
+                                                                        .minimumInteractiveComponentSize(),
                                                                 ) {
                                                                     Text(DateTimeHelper.formatMinuteOfDay(aiTask.startMinuteOfDay), style = MonoSmallStyle)
                                                                 }
@@ -962,7 +999,9 @@ fun TaskEditorSheet(
                                                                         ).show()
                                                                     },
                                                                     shape = RoundedCornerShape(10.dp),
-                                                                    modifier = Modifier.weight(1f),
+                                                                    modifier = Modifier
+                                                                        .weight(1f)
+                                                                        .minimumInteractiveComponentSize(),
                                                                 ) {
                                                                     Text(DateTimeHelper.formatMinuteOfDay(aiTask.endMinuteOfDay), style = MonoSmallStyle)
                                                                 }
@@ -1089,47 +1128,117 @@ fun TaskEditorSheet(
                                 }
                             }
 
-                            // Location Name + GPS Auto Fill
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                OutlinedTextField(
-                                    value = locationName,
-                                    onValueChange = { locationName = it },
-                                    label = { Text("Lokasi (Opsional)") },
-                                    placeholder = { Text("Kantor, Kampus, Rumah...") },
-                                    leadingIcon = {
-                                        Icon(Icons.Filled.LocationOn, contentDescription = null)
-                                    },
-                                    singleLine = true,
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .testTag("task_location_input"),
-                                )
-                                BouncyOutlinedButton(
-                                    onClick = {
-                                        haptics.tapSoft()
-                                        if (LocationHelper.hasLocationPermission(context)) {
-                                            if (defaultLocationName.isNotBlank()) {
-                                                locationName = defaultLocationName
-                                                locationLat = defaultLocationLat
-                                                locationLng = defaultLocationLng
-                                            }
-                                            onDetectLocation?.invoke()
-                                        } else {
-                                            locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
-                                        }
-                                    },
-                                    shape = RoundedCornerShape(14.dp),
-                                    modifier = Modifier
-                                        .minimumInteractiveComponentSize()
-                                        .testTag("use_gps_location_button"),
+                            // Location Name + GPS Auto Fill + Indonesian Region Picker
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
                                 ) {
-                                    Icon(Icons.Filled.MyLocation, contentDescription = "Pakai lokasi GPS", modifier = Modifier.size(16.dp))
-                                    Spacer(Modifier.width(4.dp))
-                                    Text("GPS")
+                                    OutlinedTextField(
+                                        value = locationName,
+                                        onValueChange = { locationName = it },
+                                        label = { Text("Lokasi (Opsional)") },
+                                        placeholder = { Text("Kantor, Kampus, Rumah...") },
+                                        leadingIcon = {
+                                            Icon(Icons.Filled.LocationOn, contentDescription = null)
+                                        },
+                                        singleLine = true,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .testTag("task_location_input"),
+                                    )
+                                    BouncyOutlinedButton(
+                                        onClick = {
+                                            haptics.tapSoft()
+                                            if (LocationHelper.hasLocationPermission(context)) {
+                                                if (defaultLocationName.isNotBlank()) {
+                                                    locationName = defaultLocationName
+                                                    locationLat = defaultLocationLat
+                                                    locationLng = defaultLocationLng
+                                                }
+                                                onDetectLocation?.invoke()
+                                            } else {
+                                                locationPermissionLauncher.launch(Manifest.permission.ACCESS_COARSE_LOCATION)
+                                            }
+                                        },
+                                        shape = RoundedCornerShape(14.dp),
+                                        modifier = Modifier
+                                            .minimumInteractiveComponentSize()
+                                            .testTag("use_gps_location_button"),
+                                    ) {
+                                        Icon(Icons.Filled.MyLocation, contentDescription = "Pakai lokasi GPS", modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("GPS")
+                                    }
+                                }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    BouncyOutlinedButton(
+                                        onClick = {
+                                            haptics.tapSoft()
+                                            showMapPicker = true
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .minimumInteractiveComponentSize()
+                                            .testTag("pick_task_map_button"),
+                                    ) {
+                                        Icon(Icons.Filled.Map, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Pilih di Peta", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    BouncyOutlinedButton(
+                                        onClick = {
+                                            haptics.tapSoft()
+                                            showRegionPicker = true
+                                        },
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .minimumInteractiveComponentSize()
+                                            .testTag("pick_task_region_button"),
+                                    ) {
+                                        Icon(Icons.Filled.LocationCity, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(6.dp))
+                                        Text("Kota / Wilayah", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                }
+                                val activeLat = locationLat
+                                val activeLng = locationLng
+                                if (activeLat != null && activeLng != null) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = "Pin tersimpan (${String.format(java.util.Locale.US, "%.4f, %.4f", activeLat, activeLng)})",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = atmo.accentMint,
+                                        )
+                                        BouncyTextButton(
+                                            onClick = {
+                                                haptics.tapSoft()
+                                                openInGoogleMaps(
+                                                    context = context,
+                                                    latitude = activeLat,
+                                                    longitude = activeLng,
+                                                    label = locationName.ifBlank { title.ifBlank { "Lokasi Jadwal" } },
+                                                )
+                                            },
+                                            modifier = Modifier
+                                                .minimumInteractiveComponentSize()
+                                                .testTag("task_open_google_maps_button"),
+                                        ) {
+                                            Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                            Spacer(Modifier.width(4.dp))
+                                            Text("Google Maps", style = MaterialTheme.typography.labelMedium)
+                                        }
+                                    }
                                 }
                             }
 
@@ -1403,22 +1512,36 @@ fun TaskEditorSheet(
                                         ) + fadeIn(),
                                         exit = shrinkVertically() + fadeOut(),
                                     ) {
-                                        FlowRow(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                                        ) {
-                                            listOf(0, 5, 15, 30, 60).forEach { mins ->
-                                                val chipText = if (mins == 0) "Tepat waktu" else "$mins mnt sblm"
-                                                BouncyFilterChip(
-                                                    selected = reminderLeadMinutes == mins,
-                                                    onClick = {
-                                                        haptics.tapTick()
-                                                        reminderLeadMinutes = mins
-                                                    },
-                                                    label = { Text(chipText) },
-                                                    modifier = Modifier.testTag("reminder_lead_$mins"),
-                                                )
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            FlowRow(
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp),
+                                            ) {
+                                                listOf(0, 5, 15, 30, 60).forEach { mins ->
+                                                    val chipText = if (mins == 0) "Tepat waktu" else "$mins mnt sblm"
+                                                    BouncyFilterChip(
+                                                        selected = reminderLeadMinutes == mins,
+                                                        onClick = {
+                                                            haptics.tapTick()
+                                                            reminderLeadMinutes = mins
+                                                        },
+                                                        label = { Text(chipText) },
+                                                        modifier = Modifier.testTag("reminder_lead_$mins"),
+                                                    )
+                                                }
                                             }
+                                            val cascadingOffsets = remember(reminderLeadMinutes) {
+                                                ReminderScheduler.computeCascadingReminderOffsets(reminderLeadMinutes)
+                                            }
+                                            val cascadingText = cascadingOffsets.joinToString(", ") { offset ->
+                                                if (offset == 0) "Tepat waktu" else "H-$offset mnt"
+                                            }
+                                            Text(
+                                                text = "Otomatis bertahap: $cascadingText + cek telat 5 mnt bila belum selesai.",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = atmo.accentCobalt,
+                                                modifier = Modifier.testTag("reminder_cascading_preview"),
+                                            )
                                         }
                                     }
                                 }
@@ -1718,6 +1841,14 @@ fun TaskEditorSheet(
                                             label = { Text(rule.labelId) },
                                         )
                                     }
+                                }
+                                val resolvedKey = iconKey.ifBlank { TaskIconCatalog.autoDetectIconKey(title) }
+                                if (recurrence == RecurrenceRule.YEARLY || resolvedKey == "cake") {
+                                    Text(
+                                        text = "Tips: Cocok untuk ulang tahun teman/keluarga — ikon kue & kartu spesial aktif!",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFFDB2777),
+                                    )
                                 }
                             }
 

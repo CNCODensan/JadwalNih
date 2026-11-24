@@ -30,7 +30,11 @@ object CalendarExportHelper {
                 RecurrenceRule.DAILY -> putExtra(CalendarContract.Events.RRULE, "FREQ=DAILY")
                 RecurrenceRule.WEEKLY -> putExtra(CalendarContract.Events.RRULE, "FREQ=WEEKLY")
                 RecurrenceRule.MONTHLY -> putExtra(CalendarContract.Events.RRULE, "FREQ=MONTHLY")
+                RecurrenceRule.YEARLY -> putExtra(CalendarContract.Events.RRULE, "FREQ=YEARLY")
                 RecurrenceRule.NONE -> Unit
+            }
+            if (context !is android.app.Activity) {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
         }
 

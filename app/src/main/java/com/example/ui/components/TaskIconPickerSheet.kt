@@ -124,7 +124,10 @@ fun TaskIconPickerSheet(
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
                 trailingIcon = {
                     if (searchQuery.isNotEmpty()) {
-                        BouncyIconButton(onClick = { searchQuery = "" }) {
+                        BouncyIconButton(
+                            onClick = { searchQuery = "" },
+                            modifier = Modifier.minimumInteractiveComponentSize(),
+                        ) {
                             Icon(Icons.Filled.Close, contentDescription = "Hapus pencarian")
                         }
                     }

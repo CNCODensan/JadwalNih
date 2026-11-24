@@ -7,7 +7,7 @@ import java.util.Locale
 import java.util.TimeZone
 
 object DateTimeHelper {
-    private val indonesiaLocale = Locale("id", "ID")
+    private val indonesiaLocale = Locale.forLanguageTag("id-ID")
     private val isoFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
     private val dayNames = listOf("Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab")
@@ -40,9 +40,11 @@ object DateTimeHelper {
             val month = parts[1].toIntOrNull()
             val day = parts[2].toIntOrNull()
             if (year != null && month != null && day != null) {
+                cal.set(Calendar.DAY_OF_MONTH, 1)
                 cal.set(Calendar.YEAR, year)
                 cal.set(Calendar.MONTH, (month - 1).coerceIn(0, 11))
-                cal.set(Calendar.DAY_OF_MONTH, day.coerceIn(1, 31))
+                val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+                cal.set(Calendar.DAY_OF_MONTH, day.coerceIn(1, maxDay))
                 cal.set(Calendar.HOUR_OF_DAY, 0)
                 cal.set(Calendar.MINUTE, 0)
                 cal.set(Calendar.SECOND, 0)
@@ -89,6 +91,70 @@ object DateTimeHelper {
         val cal = parseIsoToCalendar(dateIso)
         cal.add(Calendar.MONTH, months)
         return calendarToIso(cal)
+    }
+
+    fun addYears(dateIso: String, years: Int): String {
+        val cal = parseIsoToCalendar(dateIso)
+        val origMonth = cal.get(Calendar.MONTH)
+        val origDay = cal.get(Calendar.DAY_OF_MONTH)
+        cal.add(Calendar.YEAR, years)
+        // Guard Feb 29 -> Feb 28 in non-leap year cleanly
+        if (origMonth == Calendar.FEBRUARY && origDay == 29 && cal.get(Calendar.MONTH) != Calendar.FEBRUARY) {
+            cal.set(Calendar.MONTH, Calendar.FEBRUARY)
+            cal.set(Calendar.DAY_OF_MONTH, 28)
+        }
+        return calendarToIso(cal)
+    }
+
+    fun monthDayKey(dateIso: String): String {
+        val parts = dateIso.split("-")
+        return if (parts.size == 3) "${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}" else ""
+    }
+
+    fun yearOf(dateIso: String): Int? = dateIso.split("-").firstOrNull()?.toIntOrNull()
+
+    fun resolveBirthdayOccurrenceInYear(birthDateIso: String, targetYear: Int): String? {
+        val parts = birthDateIso.split("-")
+        if (parts.size != 3) return null
+        val m = parts[1].toIntOrNull()?.coerceIn(1, 12) ?: return null
+        val d = parts[2].toIntOrNull()?.coerceIn(1, 31) ?: return null
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.YEAR, targetYear)
+            set(Calendar.MONTH, m - 1)
+            set(Calendar.DAY_OF_MONTH, 1)
+            val maxD = getActualMaximum(Calendar.DAY_OF_MONTH)
+            set(Calendar.DAY_OF_MONTH, d.coerceAtMost(maxD))
+        }
+        return calendarToIso(cal)
+    }
+
+    fun isSameMonthAndDay(dateIsoA: String, dateIsoB: String): Boolean {
+        val keyA = monthDayKey(dateIsoA)
+        val keyB = monthDayKey(dateIsoB)
+        return keyA.isNotEmpty() && keyA == keyB
+    }
+
+    fun daysUsingSince(firstUsedAtEpochMs: Long, nowEpochMs: Long = System.currentTimeMillis()): Int {
+        if (firstUsedAtEpochMs <= 0L || nowEpochMs <= firstUsedAtEpochMs) return 1
+        val diffDays = ((nowEpochMs - firstUsedAtEpochMs) / 86_400_000L).toInt()
+        return (diffDays + 1).coerceAtLeast(1)
+    }
+
+    fun formatUsageDuration(daysCount: Int): String {
+        val safe = daysCount.coerceAtLeast(1)
+        return when {
+            safe >= 365 -> {
+                val years = safe / 365
+                val remMonths = (safe % 365) / 30
+                if (remMonths > 0) "$years tahun $remMonths bulan" else "$years tahun"
+            }
+            safe >= 30 -> {
+                val months = safe / 30
+                val remDays = safe % 30
+                if (remDays > 0) "$months bulan $remDays hari" else "$months bulan"
+            }
+            else -> "$safe hari"
+        }
     }
 
     fun weekDaysFor(anchorIso: String): List<String> {

@@ -100,6 +100,7 @@ import com.example.ui.components.tapConfirm
 import com.example.ui.components.tapSoft
 import com.example.ui.components.tapTick
 import com.example.ui.components.tapWarning
+import com.example.ui.theme.LocalAdaptiveSpec
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.MonoSmallStyle
 
@@ -121,6 +122,7 @@ fun FokusScreen(
 ) {
     val timer = state.focusTimer
     val atmo = LocalAtmospherePalette.current
+    val spec = LocalAdaptiveSpec.current
     val haptics = LocalHapticFeedback.current
     var taskMenuExpanded by remember { mutableStateOf(false) }
     var invalidInputShake by remember { mutableIntStateOf(0) }
@@ -154,7 +156,12 @@ fun FokusScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+        contentPadding = PaddingValues(
+            start = spec.screenHorizontalPadding,
+            end = spec.screenHorizontalPadding,
+            top = 8.dp,
+            bottom = spec.bottomNavClearance,
+        ),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item(key = "focus_header") {

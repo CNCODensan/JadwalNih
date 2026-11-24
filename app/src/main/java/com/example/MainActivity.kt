@@ -43,11 +43,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CalendarViewDay
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.outlined.BarChart
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.CalendarViewDay
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.PhotoLibrary
@@ -83,6 +85,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -107,6 +110,7 @@ import com.example.ui.components.NotificationCenterSheet
 import com.example.ui.components.SettingsSheet
 import com.example.ui.components.SplashMotionOverlay
 import com.example.ui.components.TaskEditorSheet
+import com.example.ui.components.WorshipHistorySheet
 import com.example.ui.components.bouncyPress
 import com.example.ui.components.rememberBouncyScale
 import com.example.ui.components.tapConfirm
@@ -114,13 +118,17 @@ import com.example.ui.components.tapSoft
 import com.example.ui.screens.AnalitikScreen
 import com.example.ui.screens.FokusScreen
 import com.example.ui.screens.JadwalScreen
+import com.example.ui.screens.KalenderScreen
 import com.example.ui.screens.MatriksScreen
 import com.example.ui.screens.OnboardingStartingScreen
 import com.example.ui.screens.RekapScreen
+import com.example.ui.theme.BirthdayCelebrationOverlay
 import com.example.ui.theme.DarkBackground
+import com.example.ui.theme.HolidayMotionOverlay
 import com.example.ui.theme.JadwalNihTheme
 import com.example.ui.theme.LightBackground
 import com.example.ui.theme.LocalAtmospherePalette
+import com.example.ui.theme.ProvideAdaptiveLayoutSpec
 import com.example.widget.WidgetSyncHelper
 
 class MainActivity : ComponentActivity() {
@@ -172,6 +180,7 @@ class MainActivity : ComponentActivity() {
             var editorDefaultDateIso by remember { mutableStateOf<String?>(null) }
             var showSettingsSheet by remember { mutableStateOf(false) }
             var showNotificationSheet by remember { mutableStateOf(false) }
+            var showWorshipHistorySheet by remember { mutableStateOf(false) }
 
             val locationPermissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestPermission(),
@@ -261,9 +270,12 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val isBirthdayTheme = uiState.isUserBirthdayToday && uiState.selectedTab != MainTab.REKAP
+
             JadwalNihTheme(
                 darkTheme = effectiveDarkTheme,
                 holidayThemeType = effectiveHolidayTheme,
+                isBirthdayTheme = isBirthdayTheme,
             ) {
                 val atmo = LocalAtmospherePalette.current
                 val haptics = LocalHapticFeedback.current
@@ -283,6 +295,13 @@ class MainActivity : ComponentActivity() {
                             }
                         }
 
+                        LaunchedEffect(uiState.isSimpleMode, uiState.selectedTab) {
+                            if (uiState.selectedTab !in visibleTabs) {
+                                viewModel.selectTab(MainTab.JADWAL)
+                            }
+                        }
+
+                        ProvideAdaptiveLayoutSpec(availableWidth = maxWidth) {
                         if (uiState.isPreferencesLoaded && !uiState.hasCompletedOnboarding) {
                             OnboardingStartingScreen(
                                 initialName = uiState.userName,
@@ -294,7 +313,7 @@ class MainActivity : ComponentActivity() {
                         } else if (uiState.isPreferencesLoaded) {
                             Scaffold(
                                 modifier = Modifier.fillMaxSize(),
-                                containerColor = atmo.bgTop,
+                                containerColor = Color.Transparent,
                                 contentColor = MaterialTheme.colorScheme.onBackground,
                                 contentWindowInsets = WindowInsets.safeDrawing,
                                 snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
@@ -307,7 +326,11 @@ class MainActivity : ComponentActivity() {
                                     )
                                 },
                                 floatingActionButton = {
-                                    if (uiState.selectedTab == MainTab.JADWAL || uiState.selectedTab == MainTab.MATRIKS) {
+                                    if (
+                                        uiState.selectedTab == MainTab.JADWAL ||
+                                        uiState.selectedTab == MainTab.KALENDER ||
+                                        uiState.selectedTab == MainTab.MATRIKS
+                                    ) {
                                         val fabInteraction = remember { MutableInteractionSource() }
                                         val fabScale = rememberBouncyScale(fabInteraction, pressedScale = 0.88f)
                                         FloatingActionButton(
@@ -404,8 +427,8 @@ class MainActivity : ComponentActivity() {
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                     ) {
                                         val contentModifier = Modifier
-                                            .fillMaxSize()
                                             .widthIn(max = 600.dp)
+                                            .fillMaxSize()
 
                                         AnimatedContent(
                                             targetState = uiState.selectedTab,
@@ -489,6 +512,50 @@ class MainActivity : ComponentActivity() {
                                                         }
                                                     },
                                                     onSkipForeshadow = viewModel::skipForeshadowOccurrence,
+                                                    onOpenWorshipHistory = { showWorshipHistorySheet = true },
+                                                    onReplayHolidayMotion = { viewModel.replayHolidayMotion() },
+                                                    onOpenBirthdayCelebration = viewModel::triggerBirthdayPreview,
+                                                    modifier = contentModifier,
+                                                )
+
+                                                MainTab.KALENDER -> KalenderScreen(
+                                                    state = uiState,
+                                                    onSelectDate = viewModel::selectSharedCalendarDate,
+                                                    onAddTaskForDate = { dateIso ->
+                                                        editingTask = null
+                                                        editingDraft = null
+                                                        editorDefaultHour = null
+                                                        editorDefaultDateIso = dateIso
+                                                        showEditorSheet = true
+                                                    },
+                                                    onEditTask = { task ->
+                                                        editingTask = task
+                                                        editingDraft = null
+                                                        editorDefaultHour = null
+                                                        editorDefaultDateIso = task.dateIso
+                                                        showEditorSheet = true
+                                                    },
+                                                    onToggleComplete = viewModel::toggleTaskComplete,
+                                                    onToggleSubTask = viewModel::toggleSubTask,
+                                                    onMoveToTomorrow = viewModel::moveTaskToTomorrow,
+                                                    onExportCalendar = { task ->
+                                                        val launched = CalendarExportHelper.launchCalendarInsert(context, task)
+                                                        if (!launched) {
+                                                            viewModel.showMessage("Aplikasi kalender tidak ditemukan di perangkat ini.")
+                                                        }
+                                                    },
+                                                    onDeleteTask = { task ->
+                                                        viewModel.deleteTask(task, deleteAllSeries = false)
+                                                    },
+                                                    onDeleteRecurringSeries = { task ->
+                                                        viewModel.deleteTask(task, deleteAllSeries = true)
+                                                    },
+                                                    onOverrideAttended = viewModel::overrideMissedTaskAsAttended,
+                                                    onOpenRecapForDate = { dateIso ->
+                                                        viewModel.selectSharedCalendarDate(dateIso)
+                                                        viewModel.selectTab(MainTab.REKAP)
+                                                    },
+                                                    onOpenBirthdayCelebration = viewModel::triggerBirthdayPreview,
                                                     modifier = contentModifier,
                                                 )
 
@@ -572,6 +639,7 @@ class MainActivity : ComponentActivity() {
                                                     },
                                                     onNotifyMessage = viewModel::showMessage,
                                                     onOverlayVisibilityChange = { isRekapOverlayOpen = it },
+                                                    onUpdateRecapLocation = viewModel::updateRecapLocation,
                                                     modifier = contentModifier,
                                                 )
 
@@ -695,6 +763,34 @@ class MainActivity : ComponentActivity() {
                                 onHolidayThemePreviewChange = viewModel::setHolidayThemePreview,
                                 onDetectLocation = { viewModel.detectCurrentLocationNow(showFeedback = true) },
                                 onManualLocationSave = viewModel::updateManualLocation,
+                                onRegionSelected = viewModel::updateSelectedRegion,
+                                birthDateIso = uiState.birthDateIso,
+                                personalBirthdayStats = uiState.personalBirthdayStats,
+                                prayerCardVisibilityMode = uiState.prayerCardVisibilityMode,
+                                allowMissedPrayerManualEdit = uiState.allowMissedPrayerManualEdit,
+                                currentLatitude = uiState.currentLatitude,
+                                currentLongitude = uiState.currentLongitude,
+                                onBirthDateSave = viewModel::setBirthDateIso,
+                                onTriggerBirthdayPreview = viewModel::triggerBirthdayPreview,
+                                onPrayerCardVisibilityChange = viewModel::setPrayerCardVisibilityMode,
+                                onAllowMissedPrayerEditChange = viewModel::setAllowMissedPrayerManualEdit,
+                                onOpenWorshipHistory = { showWorshipHistorySheet = true },
+                                onConfirmMapLocation = viewModel::updatePreferredLocation,
+                                onReplayHolidayMotion = { viewModel.replayHolidayMotion() },
+                            )
+                        }
+
+                        if (showWorshipHistorySheet) {
+                            WorshipHistorySheet(
+                                religion = uiState.religion,
+                                historyDays = uiState.worshipHistoryDays,
+                                allowManualMissedEdit = uiState.allowMissedPrayerManualEdit,
+                                onToggleItem = viewModel::toggleWorshipComplete,
+                                onOpenSettings = {
+                                    showWorshipHistorySheet = false
+                                    showSettingsSheet = true
+                                },
+                                onDismiss = { showWorshipHistorySheet = false },
                             )
                         }
 
@@ -781,10 +877,26 @@ class MainActivity : ComponentActivity() {
                             )
                         }
 
+                        if (!showSplash && uiState.hasCompletedOnboarding && uiState.selectedTab != MainTab.REKAP) {
+                            HolidayMotionOverlay(
+                                themeType = uiState.activeHolidayMotion,
+                                onDismiss = viewModel::dismissHolidayMotion,
+                            )
+                        }
+
+                        if (!showSplash && uiState.hasCompletedOnboarding && uiState.showBirthdayCelebration) {
+                            BirthdayCelebrationOverlay(
+                                userName = uiState.userName,
+                                stats = uiState.personalBirthdayStats,
+                                onDismiss = viewModel::dismissBirthdayCelebration,
+                            )
+                        }
+
                         if (showSplash) {
                             SplashMotionOverlay(
                                 onFinished = { showSplash = false },
                             )
+                        }
                         }
                     }
                 }
@@ -795,6 +907,7 @@ class MainActivity : ComponentActivity() {
 
 private fun tabIcon(tab: MainTab, selected: Boolean): ImageVector = when (tab) {
     MainTab.JADWAL -> if (selected) Icons.Filled.CalendarViewDay else Icons.Outlined.CalendarViewDay
+    MainTab.KALENDER -> if (selected) Icons.Filled.CalendarMonth else Icons.Outlined.CalendarMonth
     MainTab.MATRIKS -> if (selected) Icons.Filled.GridView else Icons.Outlined.GridView
     MainTab.FOKUS -> if (selected) Icons.Filled.Timer else Icons.Outlined.Timer
     MainTab.REKAP -> if (selected) Icons.Filled.PhotoLibrary else Icons.Outlined.PhotoLibrary

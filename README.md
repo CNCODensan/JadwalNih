@@ -42,15 +42,15 @@ Salin prompt siap pakai langsung dari tab **Otomatis (AI)** di dalam aplikasi, a
 - Ikon lonceng di sebelah ikon Pengaturan menyimpan riwayat pengingat tugas, waktu ibadah, Hari Raya (otomatis dibersihkan setelah 30 hari), dan hingga **5 draf edit terakhir** agar tidak hilang jika editor tertutup tanpa sengaja.
 
 ### 4. Pengingat Sholat 5 Waktu & Ibadah Multi-Agama
-- Mendukung pilihan **Islam** (5 waktu sholat harian via API Aladhan dengan cadangan perhitungan astronomi matahari lokal/offline), serta jadwal doa harian & ibadah mingguan untuk **Kristen**, **Katolik**, **Hindu**, **Buddha**, dan **Konghucu**.
+- Mendukung pilihan **Islam** (5 waktu sholat harian sesuai **API MyQuran Kemenag** dengan pencocokan kota otomatis dan cadangan kalkulasi astronomi Kemenag offline), serta jadwal doa harian & ibadah mingguan untuk **Kristen**, **Katolik**, **Hindu**, **Buddha**, dan **Konghucu**.
 - Dapat dicentang selesai lengkap dengan hitung mundur waktu berikutnya, suara/mode senyap di Pengaturan, kartu ringkasan mingguan di tab **Analitik**, pengingat lembut yang tidak memutus timer di tab **Fokus**, serta tombol ganda langsung di **Widget** layar utama.
 
 ### 5. Hari Raya Nasional & Tema Dinamis
-- Mengambil daftar hari libur nasional & hari raya dari API publik (dengan cadangan kalender lokal).
+- Mengambil daftar hari libur nasional & cuti bersama Indonesia dari API lokal **DayOffAPI** dan **ApiHariLibur** (dengan cadangan kalender lokal offline).
 - Tema warna, ornamen header, spanduk sapaan, dan latar samar daftar jadwal otomatis menyesuaikan tema **Kemerdekaan RI (Merah Putih)**, **Idul Fitri**, **Imlek**, **Natal**, maupun **Nyepi / Waisak** saat hari H — atau bisa dicoba kapan saja lewat opsi Pratinjau di Pengaturan.
 
-### 6. Lokasi GPS Otomatis, Timer Fokus & Rekap Foto
-- **Lokasi Perkiraan (GPS) & Manual**: Meminta izin `ACCESS_COARSE_LOCATION` satu kali setelah animasi pembuka selesai, disertai fallback kota terakhir / pengisian manual di Pengaturan. Dipakai untuk nama lokasi jadwal, metadata lokasi di Rekap Foto (galeri & lightbox), dan akurasi waktu sholat.
+### 6. Lokasi GPS Otomatis, Pemilih Wilayah Indonesia, Timer Fokus & Rekap Foto
+- **Lokasi GPS & Pemilih Provinsi/Kota Indonesia**: Meminta izin `ACCESS_COARSE_LOCATION` satu kali setelah animasi pembuka selesai, dilengkapi pemilih bertingkat **Provinsi -> Kabupaten/Kota** (**API Wilayah Indonesia Emsifa v2** lengkap dengan koordinat otomatis & fallback offline) di **Pengaturan** maupun **Editor Jadwal**. Dipakai untuk nama lokasi jadwal, metadata lokasi di Rekap Foto (galeri & lightbox), serta akurasi waktu sholat Kemenag.
 - **Rekap Foto Harian**: Kamera bawaan CameraX + Photo Picker (tanpa izin baca galeri luas), cap waktu & gaya teks, kolase JPEG, dan metadata lokasi pengambilan foto.
 
 ---

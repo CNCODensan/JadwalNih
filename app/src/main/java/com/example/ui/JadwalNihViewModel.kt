@@ -23,18 +23,22 @@ import com.example.domain.GreetingState
 import com.example.domain.HeatmapDayCell
 import com.example.domain.HolidayInfo
 import com.example.domain.HolidayThemeType
+import com.example.domain.IndonesiaRegency
 import com.example.domain.LocationHelper
 import com.example.domain.MainTab
 import com.example.domain.NotificationCategory
 import com.example.domain.NotificationLogEntry
+import com.example.domain.PersonalBirthdayStats
 import com.example.domain.PhotoRecap
 import com.example.domain.PhotoTextAlignment
 import com.example.domain.PhotoTextStyle
+import com.example.domain.PrayerCardVisibilityMode
 import com.example.domain.PrayerTimesService
 import com.example.domain.PriorityQuadrant
 import com.example.domain.PublicHolidayService
 import com.example.domain.QuickGlanceSummary
 import com.example.domain.QuickGlanceTarget
+import com.example.domain.RecurrenceRule
 import com.example.domain.ReligionOption
 import com.example.domain.ScheduleAnalyzer
 import com.example.domain.ScheduleScope
@@ -45,17 +49,21 @@ import com.example.domain.TaskStatus
 import com.example.domain.TaskWithStatus
 import com.example.domain.ThemeMode
 import com.example.domain.UserPreferences
+import com.example.domain.WorshipActiveWindow
+import com.example.domain.WorshipHistoryDay
 import com.example.domain.WorshipScheduleItem
 import com.example.notifications.ReminderScheduler
 import com.example.widget.WidgetSyncHelper
 import java.util.Calendar
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -126,6 +134,20 @@ data class JadwalNihUiState(
     val unreadNotificationCount: Int = 0,
     val draftNotificationCount: Int = 0,
     val foreshadowOccurrences: List<ForeshadowOccurrence> = emptyList(),
+    // Final polish features
+    val birthDateIso: String = "",
+    val firstUsedAtEpochMs: Long = 0L,
+    val isUserBirthdayToday: Boolean = false,
+    val personalBirthdayStats: PersonalBirthdayStats = PersonalBirthdayStats(),
+    val showBirthdayCelebration: Boolean = false,
+    val activeHolidayMotion: HolidayThemeType? = null,
+    val prayerCardVisibilityMode: PrayerCardVisibilityMode = PrayerCardVisibilityMode.ONLY_ACTIVE_WINDOW,
+    val allowMissedPrayerManualEdit: Boolean = true,
+    val activeWorshipWindow: WorshipActiveWindow = WorshipActiveWindow(),
+    val worshipHistoryDays: List<WorshipHistoryDay> = emptyList(),
+    val todayHolidays: List<HolidayInfo> = emptyList(),
+    val selectedDateHolidays: List<HolidayInfo> = emptyList(),
+    val allHolidays: List<HolidayInfo> = emptyList(),
 )
 
 class JadwalNihViewModel(application: Application) : AndroidViewModel(application) {
@@ -167,7 +189,13 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     private val _matrixQuadrantFilter = MutableStateFlow<PriorityQuadrant?>(null)
     private val _analyticsScope = MutableStateFlow(ScheduleScope.WEEKLY)
     private val _selectedRecapDateIso = MutableStateFlow(DateTimeHelper.todayIso())
-    private val _clockTick = MutableStateFlow(System.currentTimeMillis())
+    private val clockTickFlow: Flow<Long> = flow {
+        emit(System.currentTimeMillis())
+        while (true) {
+            delay(30_000L)
+            emit(System.currentTimeMillis())
+        }
+    }
     private val _focusTimer = MutableStateFlow(FocusTimerState())
     private val _snackbarMessage = MutableStateFlow<String?>(null)
     private val _pendingUndoPayload = MutableStateFlow<UndoPayload?>(null)
@@ -175,9 +203,11 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isExportingCollage = MutableStateFlow(false)
     private val _celebrationTick = MutableStateFlow(0)
     private val _pendingImportPreview = MutableStateFlow<JsonBackupManager.BackupPreviewInfo?>(null)
-    private val _holidaysMap = MutableStateFlow<Map<String, HolidayInfo>>(emptyMap())
+    private val _allHolidays = MutableStateFlow<List<HolidayInfo>>(emptyList())
     private val _rawTodayWorship = MutableStateFlow<List<WorshipScheduleItem>>(emptyList())
     private val _dismissedFocusWorshipKey = MutableStateFlow<String?>(null)
+    private val _showBirthdayCelebration = MutableStateFlow(false)
+    private val _activeHolidayMotion = MutableStateFlow<HolidayThemeType?>(null)
 
     private var timerTickerJob: Job? = null
     private var draftSaveJob: Job? = null
@@ -239,7 +269,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     private data class SecondaryDataSnapshot(
         val notificationLogs: List<NotificationLogEntry>,
         val worshipCheckinKeys: Set<String>,
-        val holidaysMap: Map<String, HolidayInfo>,
+        val allHolidays: List<HolidayInfo>,
         val rawTodayWorship: List<WorshipScheduleItem>,
         val dismissedFocusWorshipKey: String?,
     )
@@ -268,14 +298,14 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     private val secondaryDataFlow = combine(
         repository.notificationLogsFlow,
         repository.worshipCheckinKeysFlow,
-        _holidaysMap,
+        _allHolidays,
         _rawTodayWorship,
         _dismissedFocusWorshipKey,
     ) { logs, checkins, holidays, rawWorship, dismissedKey ->
         SecondaryDataSnapshot(
             notificationLogs = logs,
             worshipCheckinKeys = checkins,
-            holidaysMap = holidays,
+            allHolidays = holidays,
             rawTodayWorship = rawWorship,
             dismissedFocusWorshipKey = dismissedKey,
         )
@@ -288,16 +318,27 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
         val isExportingCollage: Boolean,
         val celebrationTick: Int,
         val pendingImportPreview: JsonBackupManager.BackupPreviewInfo?,
+        val showBirthdayCelebration: Boolean,
+        val activeHolidayMotion: HolidayThemeType?,
     )
 
     private val feedbackStateFlow = combine(
         combine(_snackbarMessage, _pendingUndoPayload) { msg, undo -> msg to (undo != null) },
-        _isBusyBackup,
-        _isExportingCollage,
-        _celebrationTick,
+        combine(_isBusyBackup, _isExportingCollage, _celebrationTick) { busy, exp, tick -> Triple(busy, exp, tick) },
         _pendingImportPreview,
-    ) { msgUndo, isBusy, isExporting, celebrationTick, preview ->
-        FeedbackState(msgUndo.first, msgUndo.second, isBusy, isExporting, celebrationTick, preview)
+        _showBirthdayCelebration,
+        _activeHolidayMotion,
+    ) { msgUndo, flags, preview, showBday, holidayMotion ->
+        FeedbackState(
+            snackbar = msgUndo.first,
+            canUndoDelete = msgUndo.second,
+            isBusyBackup = flags.first,
+            isExportingCollage = flags.second,
+            celebrationTick = flags.third,
+            pendingImportPreview = preview,
+            showBirthdayCelebration = showBday,
+            activeHolidayMotion = holidayMotion,
+        )
     }
 
     private data class ScheduleCalculations(
@@ -321,19 +362,26 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
         val prefs: UserPreferences,
         val nav: NavFilterParams,
         val secondary: SecondaryDataSnapshot,
+        val holidaysMap: Map<String, HolidayInfo>,
         val activeHolidayTheme: HolidayThemeType,
         val todayHoliday: HolidayInfo?,
         val selectedDateHoliday: HolidayInfo?,
+        val todayHolidays: List<HolidayInfo>,
+        val selectedDateHolidays: List<HolidayInfo>,
         val todayWorshipItems: List<WorshipScheduleItem>,
         val nextWorshipItem: WorshipScheduleItem?,
         val nextWorshipCountdown: String,
+        val activeWorshipWindow: WorshipActiveWindow,
+        val worshipHistoryDays: List<WorshipHistoryDay>,
+        val isUserBirthdayToday: Boolean,
+        val personalBirthdayStats: PersonalBirthdayStats,
         val foreshadowOccurrences: List<ForeshadowOccurrence>,
     )
 
     private val scheduleCalculationsFlow = combine(
         dataSnapshotFlow,
         secondaryDataFlow,
-        _clockTick,
+        clockTickFlow,
     ) { snapshot, secondary, _ ->
         val tasks = snapshot.tasks
         val sessions = snapshot.sessions
@@ -358,11 +406,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
             scopedSchedule
         }
 
-        val matrixAnchorIso = if (nav.matrixScope == ScheduleScope.MONTHLY) {
-            nav.recapDateIso
-        } else {
-            nav.dateIso
-        }
+        val matrixAnchorIso = nav.dateIso
         val scopedMatrix = filterByScope(allWithStatus, nav.matrixScope, matrixAnchorIso)
         val matrixTasks = if (nav.matrixQuadrantFilter != null) {
             scopedMatrix.filter { it.task.quadrant == nav.matrixQuadrantFilter }
@@ -444,20 +488,26 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
             streakDays = streakDays,
         )
 
-        // Holiday & Theme resolution
-        val holidaysList = if (secondary.holidaysMap.isNotEmpty()) {
-            secondary.holidaysMap.values.toList()
+        // Holiday & Theme resolution (Red public holidays + Gold national observances)
+        val holidaysList = if (secondary.allHolidays.isNotEmpty()) {
+            secondary.allHolidays
         } else {
-            val currentYear = todayIso.take(4).toIntOrNull() ?: 2026
-            PublicHolidayService.getCachedOrEmbeddedHolidaysForYear(currentYear)
+            val currentYear = DateTimeHelper.yearOf(todayIso) ?: 2026
+            PublicHolidayService.mergeWithObservances(
+                PublicHolidayService.getCachedOrEmbeddedHolidaysForYear(currentYear),
+                currentYear,
+            ) + PublicHolidayService.mergeWithObservances(
+                PublicHolidayService.getCachedOrEmbeddedHolidaysForYear(currentYear + 1),
+                currentYear + 1,
+            )
         }
-        val holidaysMapEffective = if (secondary.holidaysMap.isNotEmpty()) {
-            secondary.holidaysMap
-        } else {
-            holidaysList.associateBy { it.dateIso }
-        }
-        val todayHoliday = holidaysMapEffective[todayIso]
-        val selectedDateHoliday = holidaysMapEffective[nav.dateIso]
+        val todayHolidays = PublicHolidayService.resolveHolidaysForDate(todayIso, holidaysList)
+        val selectedDateHolidays = PublicHolidayService.resolveHolidaysForDate(nav.dateIso, holidaysList)
+        val holidaysMapEffective = holidaysList
+            .groupBy { it.dateIso }
+            .mapValues { (dateKey, list) -> PublicHolidayService.resolveHolidaysForDate(dateKey, list).first() }
+        val todayHoliday = todayHolidays.firstOrNull()
+        val selectedDateHoliday = selectedDateHolidays.firstOrNull()
         val activeHolidayTheme = PublicHolidayService.resolveActiveHolidayTheme(
             todayIso = todayIso,
             holidays = holidaysList,
@@ -465,7 +515,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
             previewTheme = prefs.holidayThemePreview,
         )
 
-        // Worship schedule & completion mapping
+        // Worship schedule, active natural window & 7-day history
         val baseWorship = if (secondary.rawTodayWorship.isNotEmpty() &&
             secondary.rawTodayWorship.firstOrNull()?.dateIso == todayIso
         ) {
@@ -477,6 +527,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
                 latitude = prefs.lastLatitude,
                 longitude = prefs.lastLongitude,
                 completedKeys = secondary.worshipCheckinKeys,
+                locationName = prefs.lastLocationName,
             )
         }
         val todayWorshipItems = baseWorship.map { item ->
@@ -486,6 +537,24 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
         val (nextWorship, countdownLabel) = PrayerTimesService.findNextPendingWorship(
             items = todayWorshipItems,
             nowMinuteOfDay = nowMin,
+        )
+        val activeWorshipWindow = PrayerTimesService.resolveActiveWorshipWindow(
+            items = todayWorshipItems,
+            religion = prefs.religion,
+            dateIso = todayIso,
+            nowMinuteOfDay = nowMin,
+            latitude = prefs.lastLatitude,
+            longitude = prefs.lastLongitude,
+        )
+        val worshipHistoryDays = PrayerTimesService.buildWorshipHistoryDays(
+            todayIso = todayIso,
+            daysBack = 7,
+            religion = prefs.religion,
+            latitude = prefs.lastLatitude,
+            longitude = prefs.lastLongitude,
+            completedKeys = secondary.worshipCheckinKeys,
+            locationName = prefs.lastLocationName,
+            allowMissedManualEdit = prefs.allowMissedPrayerManualEdit,
         )
 
         val worshipAnalytics = ScheduleAnalyzer.computeWorshipAnalytics(
@@ -512,6 +581,18 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
             horizonDays = 28,
         )
 
+        val isUserBirthdayToday = DateTimeHelper.isSameMonthAndDay(prefs.birthDateIso, todayIso)
+        val firstUsedMs = if (prefs.firstUsedAtEpochMs > 0L) prefs.firstUsedAtEpochMs else System.currentTimeMillis()
+        val daysUsing = DateTimeHelper.daysUsingSince(firstUsedMs)
+        val personalBirthdayStats = PersonalBirthdayStats(
+            daysUsingApp = daysUsing,
+            usageDurationLabel = DateTimeHelper.formatUsageDuration(daysUsing),
+            totalCompletedTasks = allWithStatus.count { it.status == TaskStatus.COMPLETED_GREEN },
+            totalFocusMinutes = sessions.sumOf { it.actualSeconds } / 60,
+            totalPhotoRecaps = recaps.size,
+            streakDays = streakDays,
+        )
+
         ScheduleCalculations(
             allTasksWithStatus = allWithStatus,
             filteredScheduleTasks = filteredSchedule,
@@ -532,13 +613,20 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
             draft = snapshot.draft,
             prefs = prefs,
             nav = nav,
-            secondary = secondary.copy(holidaysMap = holidaysMapEffective),
+            secondary = secondary.copy(allHolidays = holidaysList),
+            holidaysMap = holidaysMapEffective,
             activeHolidayTheme = activeHolidayTheme,
             todayHoliday = todayHoliday,
             selectedDateHoliday = selectedDateHoliday,
+            todayHolidays = todayHolidays,
+            selectedDateHolidays = selectedDateHolidays,
             todayWorshipItems = todayWorshipItems,
             nextWorshipItem = nextWorship,
             nextWorshipCountdown = countdownLabel,
+            activeWorshipWindow = activeWorshipWindow,
+            worshipHistoryDays = worshipHistoryDays,
+            isUserBirthdayToday = isUserBirthdayToday,
+            personalBirthdayStats = personalBirthdayStats,
             foreshadowOccurrences = foreshadows,
         )
     }
@@ -611,7 +699,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
             activeHolidayTheme = calc.activeHolidayTheme,
             todayHoliday = calc.todayHoliday,
             selectedDateHoliday = calc.selectedDateHoliday,
-            holidaysByDate = calc.secondary.holidaysMap,
+            holidaysByDate = calc.holidaysMap,
             hasSeenV1WelcomeCard = calc.prefs.hasSeenV1WelcomeCard,
             hasPromptedInitialLocation = calc.prefs.hasPromptedInitialLocation,
             currentLocationName = calc.prefs.lastLocationName,
@@ -625,6 +713,19 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
             unreadNotificationCount = unreadCount,
             draftNotificationCount = draftCount,
             foreshadowOccurrences = calc.foreshadowOccurrences,
+            birthDateIso = calc.prefs.birthDateIso,
+            firstUsedAtEpochMs = calc.prefs.firstUsedAtEpochMs,
+            isUserBirthdayToday = calc.isUserBirthdayToday,
+            personalBirthdayStats = calc.personalBirthdayStats,
+            showBirthdayCelebration = feedback.showBirthdayCelebration,
+            activeHolidayMotion = feedback.activeHolidayMotion,
+            prayerCardVisibilityMode = calc.prefs.prayerCardVisibilityMode,
+            allowMissedPrayerManualEdit = calc.prefs.allowMissedPrayerManualEdit,
+            activeWorshipWindow = calc.activeWorshipWindow,
+            worshipHistoryDays = calc.worshipHistoryDays,
+            todayHolidays = calc.todayHolidays,
+            selectedDateHolidays = calc.selectedDateHolidays,
+            allHolidays = calc.secondary.allHolidays,
         )
     }.stateIn(
         scope = viewModelScope,
@@ -634,10 +735,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
 
     init {
         viewModelScope.launch {
-            while (true) {
-                delay(30_000L)
-                _clockTick.value = System.currentTimeMillis()
-            }
+            prefsStore.ensureFirstUsedAtEpochMs()
         }
         refreshDynamicServices(tryGpsLocation = false)
     }
@@ -660,32 +758,63 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
                 }
             }
 
-            // 3. Fetch Indonesian national holidays for current & next year
-            val year = todayIso.take(4).toIntOrNull() ?: 2026
-            val combinedHolidays = (PublicHolidayService.getHolidaysForYear(year) +
-                PublicHolidayService.getHolidaysForYear(year + 1))
-                .associateBy { it.dateIso }
-            _holidaysMap.value = combinedHolidays
+            // 3. Fetch Indonesian national holidays & observances for current & next year
+            val year = DateTimeHelper.yearOf(todayIso) ?: 2026
+            val combinedHolidays = PublicHolidayService.mergeWithObservances(
+                PublicHolidayService.getHolidaysForYear(year),
+                year,
+            ) + PublicHolidayService.mergeWithObservances(
+                PublicHolidayService.getHolidaysForYear(year + 1),
+                year + 1,
+            )
+            _allHolidays.value = combinedHolidays
 
-            val todayHoliday = combinedHolidays[todayIso]
-            if (todayHoliday != null && !todayHoliday.isCutiBersama) {
-                repository.logNotification(
-                    category = NotificationCategory.HOLIDAY,
-                    title = "Hari Raya: ${todayHoliday.name}",
-                    message = todayHoliday.bannerGreeting,
-                    isRead = false,
+            // Check Birthday Celebration & Holiday Theme Motion once on dynamic refresh
+            val todayYear = year
+            val isBirthdayToday = DateTimeHelper.isSameMonthAndDay(prefs.birthDateIso, todayIso)
+            if (isBirthdayToday && prefs.hasCompletedOnboarding) {
+                if (prefs.lastBirthdayCelebrationYear != todayYear) {
+                    prefsStore.setLastBirthdayCelebrationYear(todayYear)
+                    _showBirthdayCelebration.value = true
+                }
+            } else if (prefs.holidayThemeEnabled && prefs.hasCompletedOnboarding) {
+                val activeTheme = PublicHolidayService.resolveActiveHolidayTheme(
+                    todayIso = todayIso,
+                    holidays = combinedHolidays,
+                    holidayThemeEnabled = prefs.holidayThemeEnabled,
+                    previewTheme = prefs.holidayThemePreview,
                 )
+                if (activeTheme != HolidayThemeType.NONE && prefs.lastHolidayMotionDateIso != todayIso) {
+                    prefsStore.setLastHolidayMotionDateIso(todayIso)
+                    _activeHolidayMotion.value = activeTheme
+                }
+            }
+
+            val todayHoliday = PublicHolidayService.resolveHolidaysForDate(todayIso, combinedHolidays).firstOrNull()
+            if (todayHoliday != null && !todayHoliday.isCutiBersama && !todayHoliday.isNationalObservance) {
+                val holidayLogKey = "$todayIso|${todayHoliday.name}"
+                if (prefs.lastLoggedHolidayKey != holidayLogKey) {
+                    prefsStore.setLastLoggedHolidayKey(holidayLogKey)
+                    repository.logNotification(
+                        category = NotificationCategory.HOLIDAY,
+                        title = "Hari Raya: ${todayHoliday.name}",
+                        message = todayHoliday.bannerGreeting,
+                        isRead = false,
+                    )
+                }
             }
 
             // 4. Refresh GPS location if permitted
             var lat = prefs.lastLatitude
             var lng = prefs.lastLongitude
+            var locName = prefs.lastLocationName
             if (tryGpsLocation && LocationHelper.hasLocationPermission(getApplication())) {
                 val resolved = LocationHelper.resolveCurrentLocation(getApplication())
                 if (resolved != null) {
                     prefsStore.setLastLocation(resolved.locationName, resolved.latitude, resolved.longitude)
                     lat = resolved.latitude
                     lng = resolved.longitude
+                    locName = resolved.locationName
                 }
             }
 
@@ -697,6 +826,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
                 lng = lng,
                 enabled = prefs.prayerReminderEnabled,
                 soundEnabled = prefs.worshipNotificationSoundEnabled,
+                locationName = locName,
             )
 
             WidgetSyncHelper.refreshAllAsync(getApplication(), viewModelScope)
@@ -710,6 +840,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
         lng: Double?,
         enabled: Boolean,
         soundEnabled: Boolean,
+        locationName: String?,
     ) {
         val completed = repository.worshipCheckinKeysFlow.first()
         val items = PrayerTimesService.getDailyWorshipSchedule(
@@ -718,6 +849,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
             latitude = lat,
             longitude = lng,
             completedKeys = completed,
+            locationName = locationName,
         )
         _rawTodayWorship.value = items
         reminderScheduler.scheduleWorshipReminders(
@@ -792,7 +924,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     fun setSimpleMode(enabled: Boolean) {
         viewModelScope.launch {
             prefsStore.setSimpleMode(enabled)
-            if (enabled && (_selectedTab.value == MainTab.MATRIKS || _selectedTab.value == MainTab.ANALITIK)) {
+            if (enabled && _selectedTab.value in listOf(MainTab.KALENDER, MainTab.MATRIKS, MainTab.ANALITIK)) {
                 _selectedTab.value = MainTab.JADWAL
             }
         }
@@ -801,6 +933,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     fun completeOnboarding(name: String, isSimpleMode: Boolean, themeMode: ThemeMode) {
         viewModelScope.launch {
             prefsStore.completeOnboarding(name, isSimpleMode, themeMode)
+            prefsStore.setHasSeenV1WelcomeCard(true)
             _selectedTab.value = MainTab.JADWAL
             val greetingName = name.trim()
             _pendingUndoPayload.value = null
@@ -819,9 +952,9 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     fun setCheckInNotificationsEnabled(enabled: Boolean) {
         viewModelScope.launch {
             prefsStore.setCheckInNotificationsEnabled(enabled)
-            uiState.value.allTasksWithStatus.forEach { item ->
-                if (!item.task.isCompleted) {
-                    reminderScheduler.scheduleForTask(item.task, checkInNotificationsEnabled = enabled)
+            repository.getAllTasksOnce().forEach { task ->
+                if (!task.isCompleted) {
+                    reminderScheduler.scheduleForTask(task, checkInNotificationsEnabled = enabled)
                 }
             }
         }
@@ -830,14 +963,15 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     fun setReligion(religion: ReligionOption) {
         viewModelScope.launch {
             prefsStore.setReligion(religion)
-            val state = uiState.value
+            val prefs = prefsStore.preferencesFlow.first()
             refreshWorshipSchedule(
                 dateIso = DateTimeHelper.todayIso(),
                 religion = religion,
-                lat = state.currentLatitude,
-                lng = state.currentLongitude,
-                enabled = state.prayerReminderEnabled,
-                soundEnabled = state.worshipNotificationSoundEnabled,
+                lat = prefs.lastLatitude,
+                lng = prefs.lastLongitude,
+                enabled = prefs.prayerReminderEnabled,
+                soundEnabled = prefs.worshipNotificationSoundEnabled,
+                locationName = prefs.lastLocationName,
             )
             WidgetSyncHelper.refreshAllAsync(getApplication(), viewModelScope)
             _snackbarMessage.value = "Jadwal ibadah disesuaikan untuk ${religion.labelId}."
@@ -847,11 +981,21 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     fun setPrayerReminderEnabled(enabled: Boolean) {
         viewModelScope.launch {
             prefsStore.setPrayerReminderEnabled(enabled)
-            val state = uiState.value
+            val prefs = prefsStore.preferencesFlow.first()
+            val items = _rawTodayWorship.value.ifEmpty {
+                PrayerTimesService.getCachedOrOfflineWorshipSchedule(
+                    dateIso = DateTimeHelper.todayIso(),
+                    religion = prefs.religion,
+                    latitude = prefs.lastLatitude,
+                    longitude = prefs.lastLongitude,
+                    completedKeys = repository.worshipCheckinKeysFlow.first(),
+                    locationName = prefs.lastLocationName,
+                )
+            }
             reminderScheduler.scheduleWorshipReminders(
-                items = state.todayWorshipItems,
+                items = items,
                 enabled = enabled,
-                soundEnabled = state.worshipNotificationSoundEnabled,
+                soundEnabled = prefs.worshipNotificationSoundEnabled,
             )
             WidgetSyncHelper.refreshAllAsync(getApplication(), viewModelScope)
         }
@@ -860,10 +1004,20 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     fun setWorshipNotificationSoundEnabled(enabled: Boolean) {
         viewModelScope.launch {
             prefsStore.setWorshipNotificationSoundEnabled(enabled)
-            val state = uiState.value
+            val prefs = prefsStore.preferencesFlow.first()
+            val items = _rawTodayWorship.value.ifEmpty {
+                PrayerTimesService.getCachedOrOfflineWorshipSchedule(
+                    dateIso = DateTimeHelper.todayIso(),
+                    religion = prefs.religion,
+                    latitude = prefs.lastLatitude,
+                    longitude = prefs.lastLongitude,
+                    completedKeys = repository.worshipCheckinKeysFlow.first(),
+                    locationName = prefs.lastLocationName,
+                )
+            }
             reminderScheduler.scheduleWorshipReminders(
-                items = state.todayWorshipItems,
-                enabled = state.prayerReminderEnabled,
+                items = items,
+                enabled = prefs.prayerReminderEnabled,
                 soundEnabled = enabled,
             )
             _snackbarMessage.value = if (enabled) {
@@ -881,12 +1035,114 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     fun setHolidayThemePreview(preview: HolidayThemeType) {
         viewModelScope.launch {
             prefsStore.setHolidayThemePreview(preview)
+            if (preview != HolidayThemeType.NONE) {
+                _activeHolidayMotion.value = preview
+            }
             _snackbarMessage.value = if (preview == HolidayThemeType.NONE) {
                 "Tema Hari Raya balik ke otomatis."
             } else {
                 "Pratinjau tema ${preview.labelId} aktif."
             }
         }
+    }
+
+    fun replayHolidayMotion(theme: HolidayThemeType? = null) {
+        val target = theme ?: uiState.value.activeHolidayTheme
+        if (target != HolidayThemeType.NONE) {
+            _activeHolidayMotion.value = target
+        }
+    }
+
+    fun dismissHolidayMotion() {
+        _activeHolidayMotion.value = null
+    }
+
+    fun setPrayerCardVisibilityMode(mode: PrayerCardVisibilityMode) {
+        viewModelScope.launch {
+            prefsStore.setPrayerCardVisibilityMode(mode)
+            _pendingUndoPayload.value = null
+            _snackbarMessage.value = "Tampilan kartu ibadah: ${mode.labelId}"
+        }
+    }
+
+    fun setAllowMissedPrayerManualEdit(allowed: Boolean) {
+        viewModelScope.launch {
+            prefsStore.setAllowMissedPrayerManualEdit(allowed)
+            _pendingUndoPayload.value = null
+            _snackbarMessage.value = if (allowed) {
+                "Edit manual sholat lewat (7 hari) dibuka."
+            } else {
+                "Edit manual sholat lewat dikunci."
+            }
+        }
+    }
+
+    fun setBirthDateIso(birthDateIso: String) {
+        viewModelScope.launch {
+            val cleaned = birthDateIso.trim()
+            prefsStore.setBirthDateIso(cleaned)
+            syncUserBirthdayYearlyTask(cleaned)
+            _pendingUndoPayload.value = null
+            if (cleaned.isNotEmpty()) {
+                _snackbarMessage.value = "Tanggal lahir tersimpan & pengingat tahunan otomatis aktif!"
+            } else {
+                _snackbarMessage.value = "Tanggal lahir dihapus."
+            }
+        }
+    }
+
+    private suspend fun syncUserBirthdayYearlyTask(birthDateIso: String) {
+        val allTasks = repository.getAllTasksOnce()
+        val existingAuto = allTasks.firstOrNull {
+            it.notes.contains(AUTO_BIRTHDAY_TAG) ||
+                (it.recurrence == RecurrenceRule.YEARLY && it.iconKey == "cake" && it.title == "Ulang Tahunmu")
+        }
+        if (birthDateIso.isBlank()) {
+            if (existingAuto != null) {
+                reminderScheduler.cancelForTask(existingAuto.id)
+                repository.deleteTask(existingAuto.id)
+            }
+            return
+        }
+        val todayIso = DateTimeHelper.todayIso()
+        val todayYear = DateTimeHelper.yearOf(todayIso) ?: 2026
+        val candidateThisYear = DateTimeHelper.resolveBirthdayOccurrenceInYear(birthDateIso, todayYear) ?: return
+        val targetDate = if (candidateThisYear < todayIso) {
+            DateTimeHelper.resolveBirthdayOccurrenceInYear(birthDateIso, todayYear + 1) ?: candidateThisYear
+        } else {
+            candidateThisYear
+        }
+        val task = ScheduleTask(
+            id = existingAuto?.id ?: 0L,
+            title = "Ulang Tahunmu",
+            dateIso = targetDate,
+            startMinuteOfDay = 8 * 60,
+            endMinuteOfDay = 9 * 60,
+            estimatedMinutes = 60,
+            quadrant = PriorityQuadrant.Q2_IMPORTANT_NOT_URGENT,
+            isCompleted = false,
+            isFlexible = true,
+            recurrence = RecurrenceRule.YEARLY,
+            reminderEnabled = true,
+            reminderLeadMinutes = 60,
+            notes = "Selamat ulang tahun! $AUTO_BIRTHDAY_TAG",
+            iconKey = "cake",
+        )
+        val savedId = repository.upsertTask(task)
+        val persisted = task.copy(id = if (task.id > 0L) task.id else savedId)
+        val prefs = prefsStore.preferencesFlow.first()
+        reminderScheduler.scheduleForTask(
+            persisted,
+            checkInNotificationsEnabled = prefs.checkInNotificationsEnabled,
+        )
+    }
+
+    fun triggerBirthdayPreview() {
+        _showBirthdayCelebration.value = true
+    }
+
+    fun dismissBirthdayCelebration() {
+        _showBirthdayCelebration.value = false
     }
 
     fun dismissV1WelcomeCard() {
@@ -902,22 +1158,24 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
             val resolved = LocationHelper.resolveCurrentLocation(getApplication())
             if (resolved != null) {
                 prefsStore.setLastLocation(resolved.locationName, resolved.latitude, resolved.longitude)
-                val state = uiState.value
+                val prefs = prefsStore.preferencesFlow.first()
                 refreshWorshipSchedule(
                     dateIso = DateTimeHelper.todayIso(),
-                    religion = state.religion,
+                    religion = prefs.religion,
                     lat = resolved.latitude,
                     lng = resolved.longitude,
-                    enabled = state.prayerReminderEnabled,
-                    soundEnabled = state.worshipNotificationSoundEnabled,
+                    enabled = prefs.prayerReminderEnabled,
+                    soundEnabled = prefs.worshipNotificationSoundEnabled,
+                    locationName = resolved.locationName,
                 )
+                WidgetSyncHelper.refreshAllAsync(getApplication(), viewModelScope)
                 if (showFeedback) {
                     _pendingUndoPayload.value = null
                     _snackbarMessage.value = "Lokasi terdeteksi: ${resolved.locationName}"
                 }
             } else if (showFeedback) {
                 _pendingUndoPayload.value = null
-                _snackbarMessage.value = "GPS belum aktif/terjangkau. Kamu bisa isi kota manual di Pengaturan."
+                _snackbarMessage.value = "GPS belum aktif/terjangkau. Kamu bisa pilih kota Indonesia di Pengaturan."
             }
         }
     }
@@ -925,7 +1183,18 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
     fun updateManualLocation(locationName: String) {
         viewModelScope.launch {
             val trimmed = locationName.trim()
-            prefsStore.setLastLocation(trimmed, uiState.value.currentLatitude, uiState.value.currentLongitude)
+            val prefs = prefsStore.preferencesFlow.first()
+            prefsStore.setLastLocation(trimmed, prefs.lastLatitude, prefs.lastLongitude)
+            refreshWorshipSchedule(
+                dateIso = DateTimeHelper.todayIso(),
+                religion = prefs.religion,
+                lat = prefs.lastLatitude,
+                lng = prefs.lastLongitude,
+                enabled = prefs.prayerReminderEnabled,
+                soundEnabled = prefs.worshipNotificationSoundEnabled,
+                locationName = trimmed,
+            )
+            WidgetSyncHelper.refreshAllAsync(getApplication(), viewModelScope)
             _pendingUndoPayload.value = null
             _snackbarMessage.value = if (trimmed.isNotEmpty()) {
                 "Lokasi disimpan: $trimmed"
@@ -935,9 +1204,73 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun updateSelectedRegion(regency: IndonesiaRegency) {
+        viewModelScope.launch {
+            val prefs = prefsStore.preferencesFlow.first()
+            val lat = regency.latitude ?: prefs.lastLatitude
+            val lng = regency.longitude ?: prefs.lastLongitude
+            val display = regency.displayFullName
+            prefsStore.setLastLocation(display, lat, lng)
+            refreshWorshipSchedule(
+                dateIso = DateTimeHelper.todayIso(),
+                religion = prefs.religion,
+                lat = lat,
+                lng = lng,
+                enabled = prefs.prayerReminderEnabled,
+                soundEnabled = prefs.worshipNotificationSoundEnabled,
+                locationName = display,
+            )
+            WidgetSyncHelper.refreshAllAsync(getApplication(), viewModelScope)
+            _pendingUndoPayload.value = null
+            _snackbarMessage.value = "Lokasi wilayah disetel: $display"
+        }
+    }
+
+    fun updatePreferredLocation(locationName: String, latitude: Double?, longitude: Double?) {
+        viewModelScope.launch {
+            val trimmed = locationName.trim()
+            val prefs = prefsStore.preferencesFlow.first()
+            val lat = latitude ?: prefs.lastLatitude
+            val lng = longitude ?: prefs.lastLongitude
+            prefsStore.setLastLocation(trimmed, lat, lng)
+            refreshWorshipSchedule(
+                dateIso = DateTimeHelper.todayIso(),
+                religion = prefs.religion,
+                lat = lat,
+                lng = lng,
+                enabled = prefs.prayerReminderEnabled,
+                soundEnabled = prefs.worshipNotificationSoundEnabled,
+                locationName = trimmed,
+            )
+            WidgetSyncHelper.refreshAllAsync(getApplication(), viewModelScope)
+            _pendingUndoPayload.value = null
+            _snackbarMessage.value = if (trimmed.isNotEmpty()) {
+                "Titik lokasi disimpan: $trimmed"
+            } else {
+                "Titik lokasi peta disimpan."
+            }
+        }
+    }
+
     fun toggleWorshipComplete(item: WorshipScheduleItem) {
         viewModelScope.launch {
-            val nowDone = repository.toggleWorshipCheckin(item, uiState.value.religion)
+            val prefs = prefsStore.preferencesFlow.first()
+            val todayIso = DateTimeHelper.todayIso()
+            val minAllowedIso = DateTimeHelper.addDays(todayIso, -7)
+            val isToday = item.dateIso == todayIso
+            val isWithinPast7Days = item.dateIso >= minAllowedIso && item.dateIso < todayIso
+
+            if (!isToday && (!isWithinPast7Days || !prefs.allowMissedPrayerManualEdit)) {
+                _pendingUndoPayload.value = null
+                _snackbarMessage.value = if (!prefs.allowMissedPrayerManualEdit) {
+                    "Edit manual sholat lewat sedang dikunci di Pengaturan."
+                } else {
+                    "Riwayat ibadah hanya bisa diubah untuk hari ini & 7 hari terakhir."
+                }
+                return@launch
+            }
+
+            val nowDone = repository.toggleWorshipCheckin(item, prefs.religion)
             WidgetSyncHelper.refreshAllAsync(getApplication(), viewModelScope)
             _pendingUndoPayload.value = null
             if (nowDone) {
@@ -1211,6 +1544,7 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
             _pendingUndoPayload.value = null
             if (isAttending) {
                 repository.updateAttendance(task, AttendanceStatus.CONFIRMED_ATTENDING, markCompleted = false)
+                reminderScheduler.cancelForTask(task.id)
                 _snackbarMessage.value = "Sip! Kehadiran buat \"${task.title}\" dicatat."
             } else {
                 repository.updateAttendance(task, AttendanceStatus.NOT_YET, markCompleted = false)
@@ -1590,6 +1924,23 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    fun updateRecapLocation(
+        dateIso: String,
+        locationName: String,
+        latitude: Double?,
+        longitude: Double?,
+    ) {
+        viewModelScope.launch {
+            repository.updateRecapLocation(dateIso, locationName, latitude, longitude)
+            _pendingUndoPayload.value = null
+            _snackbarMessage.value = if (locationName.isNotBlank()) {
+                "Pin lokasi rekap diperbarui: $locationName"
+            } else {
+                "Pin lokasi rekap diperbarui."
+            }
+        }
+    }
+
     fun deleteRecap(dateIso: String) {
         val snapshot = uiState.value.photoRecaps[dateIso]
         viewModelScope.launch {
@@ -1788,5 +2139,9 @@ class JadwalNihViewModel(application: Application) : AndroidViewModel(applicatio
             heatmapDays = heatmapDays,
             worshipSummary = worshipSummary,
         )
+    }
+
+    companion object {
+        private const val AUTO_BIRTHDAY_TAG = "[AUTO_USER_BIRTHDAY]"
     }
 }

@@ -41,12 +41,14 @@ import androidx.compose.material.icons.automirrored.filled.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.filled.FormatAlignRight
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Share
@@ -81,6 +83,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextLayoutResult
@@ -409,9 +412,13 @@ fun RecapCalendarSheet(
     onDeleteRecap: (String) -> Unit,
     onExportCollage: (String) -> Unit = {},
     onDismiss: () -> Unit,
+    defaultLocationLat: Double? = null,
+    defaultLocationLng: Double? = null,
+    onUpdateRecapLocation: (dateIso: String, locationName: String, lat: Double, lng: Double) -> Unit = { _, _, _, _ -> },
 ) {
     val atmo = LocalAtmospherePalette.current
     val statusPalette = LocalStatusPalette.current
+    val context = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val todayIso = remember { DateTimeHelper.todayIso() }
@@ -420,6 +427,7 @@ fun RecapCalendarSheet(
     var zoomedImagePath by remember { mutableStateOf<String?>(null) }
     var pendingDeleteDate by remember { mutableStateOf<String?>(null) }
     var pendingRemovePhotoPath by remember { mutableStateOf<String?>(null) }
+    var showRecapMapPicker by remember { mutableStateOf(false) }
 
     val activeRecap = photoRecaps[selectedDateIso]
     val photos = activeRecap?.imagePaths.orEmpty()
@@ -524,6 +532,18 @@ fun RecapCalendarSheet(
                 pendingRemovePhotoPath = null
             },
             onDismiss = { pendingRemovePhotoPath = null },
+        )
+    }
+
+    if (showRecapMapPicker) {
+        MapLocationPickerSheet(
+            initialLocationName = activeRecap?.locationName.orEmpty(),
+            initialLatitude = activeRecap?.locationLat ?: defaultLocationLat ?: DEFAULT_INDONESIA_LAT,
+            initialLongitude = activeRecap?.locationLng ?: defaultLocationLng ?: DEFAULT_INDONESIA_LNG,
+            onConfirmLocation = { name, lat, lng ->
+                onUpdateRecapLocation(selectedDateIso, name, lat, lng)
+            },
+            onDismiss = { showRecapMapPicker = false },
         )
     }
 
@@ -636,9 +656,12 @@ fun RecapCalendarSheet(
                         }
                     }
 
-                    // 7-column photo-thumbnail + schedule indicator calendar grid
                     val cells = remember(visibleMonthAnchor) {
                         DateTimeHelper.monthGridCells(visibleMonthAnchor)
+                    }
+                    val tasksByDate = remember(allTasks) { allTasks.groupBy { it.task.dateIso } }
+                    val existingThumbsByDate = remember(photoRecaps) {
+                        photoRecaps.mapValues { (_, r) -> r.imagePaths.firstOrNull { File(it).exists() } }
                     }
                     cells.chunked(7).forEach { week ->
                         Row(
@@ -655,8 +678,8 @@ fun RecapCalendarSheet(
                                 } else {
                                     val cellDate = cell.dateIso
                                     val recap = photoRecaps[cellDate]
-                                    val thumbPath = recap?.imagePaths?.firstOrNull()?.takeIf { File(it).exists() }
-                                    val cellTasks = allTasks.filter { it.task.dateIso == cellDate }
+                                    val thumbPath = existingThumbsByDate[cellDate]
+                                    val cellTasks = tasksByDate[cellDate].orEmpty()
                                     val taskDotColor = cellTasks.firstOrNull { !it.task.isCompleted }?.let {
                                         statusPalette.colorsFor(it.status).accent
                                     } ?: if (cellTasks.isNotEmpty()) statusPalette.greenAccent else null
@@ -845,6 +868,51 @@ fun RecapCalendarSheet(
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                     )
+                                }
+                            }
+                            Row(
+                                modifier = Modifier.padding(top = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                BouncyTextButton(
+                                    onClick = {
+                                        haptics.tapSoft()
+                                        showRecapMapPicker = true
+                                    },
+                                    modifier = Modifier
+                                        .minimumInteractiveComponentSize()
+                                        .testTag("recap_detail_move_pin_button"),
+                                ) {
+                                    Icon(Icons.Filled.Map, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = if (activeRecap?.locationLat != null) "Geser Pin" else "Tandai di Peta",
+                                        style = MaterialTheme.typography.labelMedium,
+                                    )
+                                }
+                                val mapLat = activeRecap?.locationLat ?: defaultLocationLat
+                                val mapLng = activeRecap?.locationLng ?: defaultLocationLng
+                                if (mapLat != null && mapLng != null) {
+                                    BouncyTextButton(
+                                        onClick = {
+                                            haptics.tapSoft()
+                                            openInGoogleMaps(
+                                                context = context,
+                                                latitude = mapLat,
+                                                longitude = mapLng,
+                                                label = activeRecap?.locationName?.ifBlank { "Rekap $selectedDateIso" }
+                                                    ?: "Rekap $selectedDateIso",
+                                            )
+                                        },
+                                        modifier = Modifier
+                                            .minimumInteractiveComponentSize()
+                                            .testTag("recap_detail_google_maps_button"),
+                                    ) {
+                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null, modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text("Google Maps", style = MaterialTheme.typography.labelMedium)
+                                    }
                                 }
                             }
                         }

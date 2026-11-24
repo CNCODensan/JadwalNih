@@ -439,10 +439,11 @@ object AiBatchScheduleParser {
         if (key != null) {
             if (obj.isNull(key)) return false to 15
             val rawVal = obj.opt(key)
-            val mins = when (rawVal) {
+            val mins: Int? = when (rawVal) {
                 is Number -> rawVal.toInt()
                 is String -> rawVal.trim().toIntOrNull()
                 is Boolean -> if (rawVal) 15 else -1
+                null -> null
                 else -> null
             }
             return if (mins != null && mins >= 0) {

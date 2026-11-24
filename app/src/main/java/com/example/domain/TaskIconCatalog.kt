@@ -1,6 +1,7 @@
 package com.example.domain
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.*
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.example.R
@@ -36,10 +37,10 @@ object TaskIconCatalog {
         spec("code", "Ngoding", TaskIconCategory.WORK_STUDY, Icons.Rounded.Code, "code", "dev", "bug", "aplikasi", "software"),
         spec("terminal", "Terminal", TaskIconCategory.WORK_STUDY, Icons.Rounded.Terminal, "server", "cli", "script", "deploy"),
         spec("school", "Kuliah", TaskIconCategory.WORK_STUDY, Icons.Rounded.School, "kuliah", "kampus", "sekolah", "wisuda", "kelas"),
-        spec("book", "Baca Buku", TaskIconCategory.WORK_STUDY, Icons.Rounded.MenuBook, "baca", "buku", "materi", "modul", "literasi"),
+        spec("book", "Baca Buku", TaskIconCategory.WORK_STUDY, Icons.AutoMirrored.Rounded.MenuBook, "baca", "buku", "materi", "modul", "literasi"),
         spec("auto_stories", "Belajar", TaskIconCategory.WORK_STUDY, Icons.Rounded.AutoStories, "belajar", "ujian", "uts", "uas", "kuis"),
         spec("edit_note", "Catatan", TaskIconCategory.WORK_STUDY, Icons.Rounded.EditNote, "catatan", "nulis", "rangkuman", "pr", "tugas"),
-        spec("assignment", "Tugas", TaskIconCategory.WORK_STUDY, Icons.Rounded.Assignment, "laporan", "skripsi", "makalah", "dokumen", "paq"),
+        spec("assignment", "Tugas", TaskIconCategory.WORK_STUDY, Icons.AutoMirrored.Rounded.Assignment, "laporan", "skripsi", "makalah", "dokumen", "paq"),
         spec("science", "Riset", TaskIconCategory.WORK_STUDY, Icons.Rounded.Science, "fisika", "kimia", "ipa", "eksperimen", "lab", "sains"),
         spec("calculate", "Matematika", TaskIconCategory.WORK_STUDY, Icons.Rounded.Calculate, "matematika", "statistika", "hitung", "aljabar", "rumus"),
         spec("design", "Desain", TaskIconCategory.WORK_STUDY, Icons.Rounded.DesignServices, "desain", "ui", "ux", "figma", "canva"),
@@ -72,9 +73,9 @@ object TaskIconCatalog {
 
         // 3. Kesehatan & Olahraga (18 icons)
         spec("fitness", "Gym", TaskIconCategory.HEALTH, Icons.Rounded.FitnessCenter, "gym", "workout", "fitness", "angkat beban", "olahraga"),
-        spec("run", "Lari", TaskIconCategory.HEALTH, Icons.Rounded.DirectionsRun, "lari", "jogging", "marathon", "cardio"),
-        spec("walk", "Jalan Kaki", TaskIconCategory.HEALTH, Icons.Rounded.DirectionsWalk, "jalan", "santai", "langkah"),
-        spec("bike", "Sepeda", TaskIconCategory.HEALTH, Icons.Rounded.DirectionsBike, "sepeda", "gowes", "cycling"),
+        spec("run", "Lari", TaskIconCategory.HEALTH, Icons.AutoMirrored.Rounded.DirectionsRun, "lari", "jogging", "marathon", "cardio"),
+        spec("walk", "Jalan Kaki", TaskIconCategory.HEALTH, Icons.AutoMirrored.Rounded.DirectionsWalk, "jalan", "santai", "langkah"),
+        spec("bike", "Sepeda", TaskIconCategory.HEALTH, Icons.AutoMirrored.Rounded.DirectionsBike, "sepeda", "gowes", "cycling"),
         spec("pool", "Renang", TaskIconCategory.HEALTH, Icons.Rounded.Pool, "renang", "kolam", "swim"),
         spec("soccer", "Sepak Bola", TaskIconCategory.HEALTH, Icons.Rounded.SportsSoccer, "bola", "futsal", "sepakbola"),
         spec("basketball", "Basket", TaskIconCategory.HEALTH, Icons.Rounded.SportsBasketball, "basket", "voli"),
@@ -117,7 +118,7 @@ object TaskIconCatalog {
         spec("people", "Ketemu Teman", TaskIconCategory.SOCIAL, Icons.Rounded.People, "nongkrong", "ketemu", "teman", "reuni", "hangout"),
         spec("family", "Keluarga", TaskIconCategory.SOCIAL, Icons.Rounded.FamilyRestroom, "orang tua", "mama", "papa", "ibu", "ayah", "anak", "keluarga"),
         spec("call", "Telepon", TaskIconCategory.SOCIAL, Icons.Rounded.Call, "telepon", "telpon", "telfon", "hubungi"),
-        spec("chat", "Chatting", TaskIconCategory.SOCIAL, Icons.Rounded.Chat, "chat", "wa", "whatsapp", "balas pesan"),
+        spec("chat", "Chatting", TaskIconCategory.SOCIAL, Icons.AutoMirrored.Rounded.Chat, "chat", "wa", "whatsapp", "balas pesan"),
         spec("cake", "Ulang Tahun", TaskIconCategory.SOCIAL, Icons.Rounded.Cake, "ulang tahun", "ultah", "pesta", "syukuran"),
         spec("gift", "Kado", TaskIconCategory.SOCIAL, Icons.Rounded.CardGiftcard, "kado", "hadiah", "hantaran", "souvenir"),
         spec("celebration", "Acara", TaskIconCategory.SOCIAL, Icons.Rounded.Celebration, "acara", "perayaan", "nikahan", "kondangan"),
@@ -143,7 +144,7 @@ object TaskIconCatalog {
         spec("tv", "Serial TV", TaskIconCategory.HOBBY, Icons.Rounded.Tv, "tv", "youtube", "streaming"),
         spec("auto_awesome", "Kreatif", TaskIconCategory.HOBBY, Icons.Rounded.AutoAwesome, "kreatif", "konten", "tiktok", "reels"),
         spec("edit", "Nulis Cerita", TaskIconCategory.HOBBY, Icons.Rounded.Edit, "jurnal", "diary", "puisi", "novel"),
-        spec("library_books", "Koleksi", TaskIconCategory.HOBBY, Icons.Rounded.LibraryBooks, "komik", "manga", "novel"),
+        spec("library_books", "Koleksi", TaskIconCategory.HOBBY, Icons.AutoMirrored.Rounded.LibraryBooks, "komik", "manga", "novel"),
         spec("extension", "Puzzle", TaskIconCategory.HOBBY, Icons.Rounded.Extension, "catur", "puzzle", "boardgame"),
         spec("theater", "Teater", TaskIconCategory.HOBBY, Icons.Rounded.TheaterComedy, "teater", "standup", "hiburan"),
         spec("live_tv", "Siaran", TaskIconCategory.HOBBY, Icons.Rounded.LiveTv, "live", "match", "pertandingan"),
@@ -171,9 +172,9 @@ object TaskIconCatalog {
         spec("bank", "Bank", TaskIconCategory.FINANCE, Icons.Rounded.AccountBalance, "bank", "atm", "transfer", "nabung"),
         spec("payments", "Bayar Tagihan", TaskIconCategory.FINANCE, Icons.Rounded.Payments, "bayar", "tagihan", "listrik", "wifi", "kos", "cicilan"),
         spec("credit_card", "Kartu", TaskIconCategory.FINANCE, Icons.Rounded.CreditCard, "kartu", "kredit", "debit", "qris"),
-        spec("receipt", "Struk", TaskIconCategory.FINANCE, Icons.Rounded.ReceiptLong, "struk", "pajak", "bon", "kwitansi"),
+        spec("receipt", "Struk", TaskIconCategory.FINANCE, Icons.AutoMirrored.Rounded.ReceiptLong, "struk", "pajak", "bon", "kwitansi"),
         spec("savings", "Tabungan", TaskIconCategory.FINANCE, Icons.Rounded.Savings, "tabungan", "celengan", "investasi", "emas"),
-        spec("trending_up", "Saham/Cuan", TaskIconCategory.FINANCE, Icons.Rounded.TrendingUp, "saham", "reksadana", "profit", "cuan"),
+        spec("trending_up", "Saham/Cuan", TaskIconCategory.FINANCE, Icons.AutoMirrored.Rounded.TrendingUp, "saham", "reksadana", "profit", "cuan"),
         spec("attach_money", "Gaji", TaskIconCategory.FINANCE, Icons.Rounded.AttachMoney, "gaji", "bonus", "honor", "reimburse"),
         spec("store", "Usaha/Toko", TaskIconCategory.FINANCE, Icons.Rounded.Storefront, "jualan", "bisnis", "orderan", "toko"),
         spec("badge", "Identitas/KTP", TaskIconCategory.FINANCE, Icons.Rounded.Badge, "ktp", "sim", "paspor", "dokumen"),
@@ -199,7 +200,7 @@ object TaskIconCatalog {
 
     fun resolveIcon(iconKey: String?, title: String = ""): ImageVector {
         val spec = byKey(iconKey) ?: byKey(autoDetectIconKey(title))
-        return spec?.icon ?: Icons.Rounded.EventNote
+        return spec?.icon ?: Icons.AutoMirrored.Rounded.EventNote
     }
 
     fun autoDetectIconKey(title: String): String {

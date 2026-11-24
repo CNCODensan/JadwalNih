@@ -31,7 +31,11 @@ import com.example.domain.DurationCategory
 import com.example.domain.ForeshadowOccurrence
 import com.example.domain.GreetingState
 import com.example.domain.HolidayThemeType
+import com.example.domain.IndonesiaProvince
+import com.example.domain.IndonesiaRegency
+import com.example.domain.IndonesiaRegionService
 import com.example.domain.MainTab
+import com.example.domain.MyQuranCity
 import com.example.domain.NotificationCategory
 import com.example.domain.NotificationLogEntry
 import com.example.domain.PhotoRecap
@@ -56,6 +60,7 @@ import com.example.domain.TaskWithStatus
 import com.example.domain.ThemeMode
 import com.example.ui.JadwalNihUiState
 import com.example.ui.components.FloatingPillNavBar
+import com.example.ui.components.IndonesiaRegionPickerSheet
 import com.example.ui.components.NotificationCenterSheet
 import com.example.ui.components.PostCapturePreviewSheet
 import com.example.ui.components.RecapCalendarSheet
@@ -1426,5 +1431,116 @@ class ExampleRobolectricTest {
         composeRule.onNodeWithTag("conflict_overwrite_button").performClick()
         composeRule.waitForIdle()
         assertEquals(AiConflictResolution.OVERWRITE_EXISTING, resolvedStrategy)
+    }
+
+    @Test
+    fun `indonesian holiday and myquran prayer parsers handle local api formats accurately`() {
+        val dayOffJson = """
+            [
+              {"tanggal": "2026-08-17", "keterangan": "Hari Kemerdekaan RI", "is_cuti": false},
+              {"tanggal": "2026-03-23", "keterangan": "Cuti Bersama Idul Fitri", "is_cuti": true}
+            ]
+        """.trimIndent()
+        val parsedDayOff = PublicHolidayService.parseHariLiburJson(dayOffJson, 2026)
+        assertEquals(2, parsedDayOff.size)
+        assertEquals(HolidayThemeType.NONE, parsedDayOff[0].themeType) // 2026-03-23 sorted first & cuti
+        assertTrue(parsedDayOff[0].isCutiBersama)
+        assertEquals(HolidayThemeType.INDEPENDENCE_DAY, parsedDayOff[1].themeType)
+
+        val apiHariLiburJson = """
+            [
+              {"holiday_date": "2026-02-17", "holiday_name": "Tahun Baru Imlek 2577", "is_national_holiday": true}
+            ]
+        """.trimIndent()
+        val parsedHariLibur = PublicHolidayService.parseHariLiburJson(apiHariLiburJson, 2026)
+        assertEquals(1, parsedHariLibur.size)
+        assertEquals(HolidayThemeType.IMLEK, parsedHariLibur[0].themeType)
+
+        val myQuranCitiesJson = """
+            {
+              "status": true,
+              "data": [
+                {"id": "1301", "lokasi": "KOTA JAKARTA PUSAT"},
+                {"id": "1219", "lokasi": "KOTA BANDUNG"},
+                {"id": "1638", "lokasi": "KOTA SURABAYA"}
+              ]
+            }
+        """.trimIndent()
+        val cities = PrayerTimesService.parseMyQuranCitiesJson(myQuranCitiesJson)
+        assertEquals(3, cities.size)
+        assertEquals("1219", PrayerTimesService.matchMyQuranCityId("Kota Bandung, Jawa Barat", cities))
+        assertEquals("1301", PrayerTimesService.matchMyQuranCityId("DKI Jakarta", cities))
+
+        val myQuranJadwalJson = """
+            {
+              "status": true,
+              "data": {
+                "id": 1219,
+                "lokasi": "KOTA BANDUNG",
+                "jadwal": {
+                  "subuh": "04:31",
+                  "dzuhur": "11:55",
+                  "ashar": "15:14",
+                  "maghrib": "17:58",
+                  "isya": "19:09"
+                }
+              }
+            }
+        """.trimIndent()
+        val slots = PrayerTimesService.parseMyQuranJadwalJson(myQuranJadwalJson)
+        assertEquals(5, slots.size)
+        assertEquals(4 * 60 + 31, slots.first { it.first == "subuh" }.second)
+        assertEquals(17 * 60 + 58, slots.first { it.first == "maghrib" }.second)
+    }
+
+    @Test
+    fun `indonesia region service parses emsifa v2 provinces and regencies and picker selects city`() {
+        val provincesJson = """
+            {
+              "meta": {"level": 1},
+              "data": [
+                {"id": "31", "name": "DKI JAKARTA"},
+                {"id": "32", "name": "JAWA BARAT"}
+              ]
+            }
+        """.trimIndent()
+        val provinces = IndonesiaRegionService.parseProvincesJson(provincesJson)
+        assertEquals(listOf("DKI Jakarta", "Jawa Barat"), provinces.map { it.name })
+
+        val regenciesJson = """
+            {
+              "meta": {"level": 2},
+              "data": [
+                {"id": "32.73", "province_id": "32", "name": "KOTA BANDUNG", "lat": -6.9175, "lng": 107.6191}
+              ]
+            }
+        """.trimIndent()
+        val regencies = IndonesiaRegionService.parseRegenciesJson(regenciesJson, "32", "Jawa Barat")
+        assertEquals(1, regencies.size)
+        assertEquals("Kota Bandung, Jawa Barat", regencies[0].displayFullName)
+        assertEquals(-6.9175, regencies[0].latitude ?: 0.0, 0.0001)
+
+        var selected: IndonesiaRegency? = null
+        composeRule.setContent {
+            JadwalNihTheme(darkTheme = false) {
+                IndonesiaRegionPickerSheet(
+                    onSelectRegency = { selected = it },
+                    onDismiss = {},
+                    initialProvinces = provinces,
+                    initialRegenciesProvider = { prov ->
+                        if (prov.id == "32") regencies else emptyList()
+                    },
+                )
+            }
+        }
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("indonesia_region_picker_sheet").assertIsDisplayed()
+        composeRule.onNodeWithTag("region_picker_search").performTextReplacement("Jawa Barat")
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("region_province_32").performClick()
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("region_regency_32.73").performClick()
+        composeRule.waitForIdle()
+        assertEquals("Kota Bandung, Jawa Barat", selected?.displayFullName)
     }
 }

@@ -63,6 +63,7 @@ import com.example.ui.components.StaggeredEntrance
 import com.example.ui.components.WeeklyWorshipAnalyticsCard
 import com.example.ui.components.bouncyPress
 import com.example.ui.components.tapSoft
+import com.example.ui.theme.LocalAdaptiveSpec
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.LocalStatusPalette
 import com.example.ui.theme.MonoSmallStyle
@@ -77,6 +78,7 @@ fun AnalitikScreen(
     val analytics = state.analytics
     val palette = LocalStatusPalette.current
     val atmo = LocalAtmospherePalette.current
+    val spec = LocalAdaptiveSpec.current
     val haptics = LocalHapticFeedback.current
     val periodOptions = listOf(ScheduleScope.WEEKLY, ScheduleScope.MONTHLY)
 
@@ -108,7 +110,12 @@ fun AnalitikScreen(
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(
+            start = spec.screenHorizontalPadding,
+            end = spec.screenHorizontalPadding,
+            top = 8.dp,
+            bottom = spec.bottomNavClearance,
+        ),
         verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         item(key = "analytics_header") {

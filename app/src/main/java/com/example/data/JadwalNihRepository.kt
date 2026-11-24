@@ -336,11 +336,19 @@ class JadwalNihRepository(
         isRead: Boolean = false,
     ) {
         val dao = notificationLogDao ?: return
-        // Prevent duplicate holiday/worship entry on same day with same title
+        // Prevent duplicate holiday/worship entry on the same calendar day with same title
         val existing = dao.getAllLogsOnce()
         if (category == NotificationCategory.HOLIDAY || category == NotificationCategory.WORSHIP) {
-            val cutoffToday = System.currentTimeMillis() - 12 * 3600_000L
-            if (existing.any { it.category == category.name && it.title == title && it.createdAtEpochMs >= cutoffToday }) {
+            val todayIso = DateTimeHelper.todayIso()
+            val alreadyLoggedToday = existing.any { entry ->
+                val entryIso = DateTimeHelper.calendarToIso(
+                    java.util.Calendar.getInstance().apply { timeInMillis = entry.createdAtEpochMs },
+                )
+                entry.category == category.name &&
+                    entry.title == title &&
+                    entryIso == todayIso
+            }
+            if (alreadyLoggedToday) {
                 return
             }
         }
@@ -530,6 +538,22 @@ class JadwalNihRepository(
         } else {
             recapDao.upsertRecap(updated.toEntity())
         }
+    }
+
+    suspend fun updateRecapLocation(
+        dateIso: String,
+        locationName: String,
+        locationLat: Double?,
+        locationLng: Double?,
+    ) {
+        val existing = recapDao.getRecapByDateOnce(dateIso)?.toDomain() ?: return
+        val updated = existing.copy(
+            locationName = locationName.trim(),
+            locationLat = locationLat,
+            locationLng = locationLng,
+            updatedAtEpochMs = System.currentTimeMillis(),
+        )
+        recapDao.upsertRecap(updated.toEntity())
     }
 
     suspend fun deleteRecap(dateIso: String, deleteImageFiles: Boolean = true) {

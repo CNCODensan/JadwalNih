@@ -59,6 +59,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
 import com.example.data.AppDatabase
 import com.example.data.ImageStorageHelper
 import com.example.data.JadwalNihRepository
@@ -85,7 +86,10 @@ import com.example.ui.theme.JadwalNihTheme
 import com.example.ui.theme.LocalAtmospherePalette
 import com.example.ui.theme.LocalStatusPalette
 import com.example.ui.theme.MonoSmallStyle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class QuickAddWidgetActivity : ComponentActivity() {
 
@@ -106,47 +110,49 @@ class QuickAddWidgetActivity : ComponentActivity() {
                 ThemeMode.LIGHT -> false
                 ThemeMode.DARK -> true
             }
-            val scope = rememberCoroutineScope()
-
             JadwalNihTheme(darkTheme = darkTheme) {
                 QuickAddWidgetPopup(
                     initialQuadrant = initialQuadrant,
                     onDismiss = { finish() },
                     onSaveTask = { task ->
-                        scope.launch {
-                            val db = AppDatabase.getInstance(applicationContext)
-                            val imageHelper = ImageStorageHelper(applicationContext)
-                            val backupManager = JsonBackupManager(
-                                context = applicationContext,
-                                taskDao = db.scheduleTaskDao(),
-                                focusDao = db.focusSessionDao(),
-                                recapDao = db.photoRecapDao(),
-                                imageHelper = imageHelper,
-                            )
-                            val repo = JadwalNihRepository(
-                                taskDao = db.scheduleTaskDao(),
-                                focusDao = db.focusSessionDao(),
-                                recapDao = db.photoRecapDao(),
-                                imageHelper = imageHelper,
-                                backupManager = backupManager,
-                                notificationLogDao = db.notificationLogDao(),
-                                worshipCheckinDao = db.worshipCheckinDao(),
-                            )
-                            val enrichedTask = task.copy(
-                                iconKey = task.iconKey.ifBlank { TaskIconCatalog.autoDetectIconKey(task.title) },
-                                locationName = task.locationName.ifBlank { prefs.lastLocationName },
-                                locationLat = task.locationLat ?: prefs.lastLatitude,
-                                locationLng = task.locationLng ?: prefs.lastLongitude,
-                            )
-                            val savedId = repo.upsertTask(enrichedTask)
-                            val persisted = enrichedTask.copy(id = savedId)
-                            if (prefs.checkInNotificationsEnabled || persisted.reminderEnabled) {
-                                ReminderScheduler(applicationContext).scheduleForTask(
-                                    persisted,
-                                    checkInNotificationsEnabled = prefs.checkInNotificationsEnabled,
+                        lifecycleScope.launch {
+                            withContext(Dispatchers.IO + NonCancellable) {
+                                val db = AppDatabase.getInstance(applicationContext)
+                                val imageHelper = ImageStorageHelper(applicationContext)
+                                val backupManager = JsonBackupManager(
+                                    context = applicationContext,
+                                    taskDao = db.scheduleTaskDao(),
+                                    focusDao = db.focusSessionDao(),
+                                    recapDao = db.photoRecapDao(),
+                                    imageHelper = imageHelper,
                                 )
+                                val repo = JadwalNihRepository(
+                                    taskDao = db.scheduleTaskDao(),
+                                    focusDao = db.focusSessionDao(),
+                                    recapDao = db.photoRecapDao(),
+                                    imageHelper = imageHelper,
+                                    backupManager = backupManager,
+                                    notificationLogDao = db.notificationLogDao(),
+                                    worshipCheckinDao = db.worshipCheckinDao(),
+                                )
+                                val enrichedTask = task.copy(
+                                    iconKey = task.iconKey.ifBlank { TaskIconCatalog.autoDetectIconKey(task.title) },
+                                    locationName = task.locationName.ifBlank { prefs.lastLocationName },
+                                    locationLat = task.locationLat ?: prefs.lastLatitude,
+                                    locationLng = task.locationLng ?: prefs.lastLongitude,
+                                )
+                                val savedId = repo.upsertTask(enrichedTask)
+                                if (savedId > 0L) {
+                                    val persisted = enrichedTask.copy(id = savedId)
+                                    if (prefs.checkInNotificationsEnabled || persisted.reminderEnabled) {
+                                        ReminderScheduler(applicationContext).scheduleForTask(
+                                            persisted,
+                                            checkInNotificationsEnabled = prefs.checkInNotificationsEnabled,
+                                        )
+                                    }
+                                    WidgetSyncHelper.refreshAll(applicationContext)
+                                }
                             }
-                            WidgetSyncHelper.refreshAll(applicationContext)
                             finish()
                         }
                     },

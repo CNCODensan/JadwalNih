@@ -2,6 +2,7 @@ package com.example.domain
 
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.Calendar
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -15,23 +16,39 @@ object PublicHolidayService {
     suspend fun getHolidaysForYear(year: Int): List<HolidayInfo> = withContext(Dispatchers.IO) {
         yearCache[year]?.let { return@withContext it }
 
-        val fromPrimaryApi = runCatching { fetchFromHariLiburVercel(year) }.getOrNull()
-        val resolved = when {
-            !fromPrimaryApi.isNullOrEmpty() -> fromPrimaryApi
-            else -> runCatching { fetchFromNagerDate(year) }.getOrNull()?.takeIf { it.isNotEmpty() }
-                ?: embeddedHolidaysForYear(year)
+        val fromDayOff = runCatching { fetchFromIndonesianEndpoint("https://dayoffapi.vercel.app/api?year=$year", year) }.getOrNull()
+        val fromHariLibur = if (fromDayOff.isNullOrEmpty()) {
+            runCatching { fetchFromIndonesianEndpoint("https://api-harilibur.vercel.app/api?year=$year", year) }.getOrNull()
+        } else {
+            null
         }
+        val baseHolidays = when {
+            !fromDayOff.isNullOrEmpty() -> fromDayOff
+            !fromHariLibur.isNullOrEmpty() -> fromHariLibur
+            else -> embeddedHolidaysForYear(year)
+        }
+        val resolved = mergeWithObservances(baseHolidays, year)
         yearCache[year] = resolved
         resolved
     }
 
     fun getCachedOrEmbeddedHolidaysForYear(year: Int): List<HolidayInfo> {
-        return yearCache[year] ?: embeddedHolidaysForYear(year)
+        return yearCache[year] ?: mergeWithObservances(embeddedHolidaysForYear(year), year)
+    }
+
+    fun resolveHolidaysForDate(dateIso: String, holidays: List<HolidayInfo>): List<HolidayInfo> {
+        val exact = holidays.filter { it.dateIso == dateIso }
+        if (exact.isNotEmpty()) return exact
+        val year = dateIso.take(4).toIntOrNull() ?: return emptyList()
+        return getCachedOrEmbeddedHolidaysForYear(year).filter { it.dateIso == dateIso }
     }
 
     fun resolveHolidayForDate(dateIso: String, holidays: List<HolidayInfo>): HolidayInfo? {
-        return holidays.firstOrNull { it.dateIso == dateIso }
-            ?: embeddedHolidays().firstOrNull { it.dateIso == dateIso }
+        val matches = resolveHolidaysForDate(dateIso, holidays)
+        if (matches.isEmpty()) return null
+        return matches.firstOrNull { it.isNationalHoliday && !it.isCutiBersama }
+            ?: matches.firstOrNull { !it.isNationalObservance }
+            ?: matches.first()
     }
 
     fun resolveActiveHolidayTheme(
@@ -50,10 +67,12 @@ object PublicHolidayService {
     fun mapHolidayNameToTheme(name: String): HolidayThemeType {
         val lower = name.lowercase()
         return when {
-            lower.contains("kemerdekaan") || lower.contains("proklamasi") || lower.contains("pancasila") ->
+            lower.contains("kemerdekaan") || lower.contains("proklamasi") || lower.contains("pancasila") ||
+                lower.contains("pahlawan") || lower.contains("sumpah pemuda") || lower.contains("kebangkitan") ->
                 HolidayThemeType.INDEPENDENCE_DAY
             lower.contains("idul fitri") || lower.contains("idul adha") || lower.contains("maulid") ||
-                lower.contains("isra") || lower.contains("tahun baru islam") || lower.contains("hijriah") ->
+                lower.contains("isra") || lower.contains("tahun baru islam") || lower.contains("hijriah") ||
+                lower.contains("santri") ->
                 HolidayThemeType.IDUL_FITRI
             lower.contains("imlek") -> HolidayThemeType.IMLEK
             lower.contains("natal") -> HolidayThemeType.NATAL
@@ -69,12 +88,40 @@ object PublicHolidayService {
             HolidayThemeType.IMLEK -> "Gong Xi Fa Cai! Selamat $name, semoga bawa hoki & sukacita."
             HolidayThemeType.NATAL -> "Selamat Hari Raya Natal! Semoga damai dan hangat menyertaimu."
             HolidayThemeType.NYEPI_WAISAK -> "Selamat $name! Semoga hari ini terasa tenang dan penuh makna."
-            HolidayThemeType.NONE -> "Hari ini ada $name! Jangan lupa atur waktumu santai ya."
+            HolidayThemeType.NONE -> "Hari ini memperingati $name! Atur waktumu dengan bermakna."
         }
     }
 
-    private fun fetchFromHariLiburVercel(year: Int): List<HolidayInfo> {
-        val url = URL("https://api-hari-libur.vercel.app/api?year=$year")
+    internal fun mergeWithObservances(baseHolidays: List<HolidayInfo>, year: Int): List<HolidayInfo> {
+        val normalizedBase = baseHolidays.map { item ->
+            val cat = when {
+                item.categoryLabel.isNotBlank() -> item.categoryLabel
+                item.isCutiBersama -> "Cuti Bersama"
+                item.isNationalObservance -> "Hari Nasional"
+                else -> "Libur Nasional"
+            }
+            item.copy(categoryLabel = cat)
+        }
+        val existingSignatures = normalizedBase
+            .map { "${it.dateIso}|${it.name.lowercase().take(12)}" }
+            .toSet()
+        val observances = embeddedObservancesForYear(year).filter { obs ->
+            val sameDayAndSimilar = normalizedBase.any { base ->
+                base.dateIso == obs.dateIso &&
+                    (base.name.equals(obs.name, ignoreCase = true) ||
+                        (obs.dateIso.endsWith("-06-01") && base.name.contains("pancasila", ignoreCase = true)) ||
+                        (obs.dateIso.endsWith("-08-17") && base.name.contains("kemerdekaan", ignoreCase = true)))
+            }
+            val sig = "${obs.dateIso}|${obs.name.lowercase().take(12)}"
+            !sameDayAndSimilar && sig !in existingSignatures
+        }
+        return (normalizedBase + observances).sortedWith(
+            compareBy<HolidayInfo>({ it.dateIso }, { it.isNationalObservance }, { it.isCutiBersama }),
+        )
+    }
+
+    private fun fetchFromIndonesianEndpoint(endpoint: String, year: Int): List<HolidayInfo> {
+        val url = URL(endpoint)
         val conn = (url.openConnection() as HttpURLConnection).apply {
             connectTimeout = 5000
             readTimeout = 5000
@@ -103,24 +150,43 @@ object PublicHolidayService {
         val list = mutableListOf<HolidayInfo>()
         for (i in 0 until arr.length()) {
             val item = arr.optJSONObject(i) ?: continue
-            val rawDate = item.optString("event_date").ifBlank { item.optString("date") }
-            val name = item.optString("event_name").ifBlank { item.optString("name") }.trim()
+            val rawDate = item.optString("tanggal")
+                .ifBlank { item.optString("holiday_date") }
+                .ifBlank { item.optString("event_date") }
+                .ifBlank { item.optString("date") }
+            val name = item.optString("keterangan")
+                .ifBlank { item.optString("holiday_name") }
+                .ifBlank { item.optString("event_name") }
+                .ifBlank { item.optString("name") }
+                .trim()
             if (rawDate.isBlank() || name.isBlank()) continue
 
             val normalizedDate = normalizeIsoDate(rawDate, fallbackYear) ?: continue
+            val isCuti = if (item.has("is_cuti")) {
+                item.optBoolean("is_cuti", false)
+            } else {
+                name.lowercase().contains("cuti bersama")
+            }
             val isNational = if (item.has("is_national_holiday")) {
                 item.optBoolean("is_national_holiday", true)
             } else {
-                true
+                !isCuti
             }
-            val isCuti = name.lowercase().contains("cuti bersama")
+            val isObs = !isNational && !isCuti
             val theme = if (isCuti) HolidayThemeType.NONE else mapHolidayNameToTheme(name)
+            val category = when {
+                isCuti -> "Cuti Bersama"
+                isObs -> "Hari Nasional"
+                else -> "Libur Nasional"
+            }
             list.add(
                 HolidayInfo(
                     dateIso = normalizedDate,
                     name = name,
                     isNationalHoliday = isNational,
                     isCutiBersama = isCuti,
+                    isNationalObservance = isObs,
+                    categoryLabel = category,
                     themeType = theme,
                     bannerGreeting = buildGreeting(name, theme),
                 ),
@@ -129,55 +195,23 @@ object PublicHolidayService {
         return list.sortedBy { it.dateIso }
     }
 
-    private fun fetchFromNagerDate(year: Int): List<HolidayInfo> {
-        val url = URL("https://date.nager.at/api/v3/PublicHolidays/$year/ID")
-        val conn = (url.openConnection() as HttpURLConnection).apply {
-            connectTimeout = 5000
-            readTimeout = 5000
-            requestMethod = "GET"
-            setRequestProperty("Accept", "application/json")
-        }
-        return try {
-            if (conn.responseCode !in 200..299) return emptyList()
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
-            val arr = JSONArray(body)
-            val list = mutableListOf<HolidayInfo>()
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
-                val date = obj.optString("date").trim()
-                val name = obj.optString("localName").ifBlank { obj.optString("name") }.trim()
-                if (date.length == 10 && name.isNotBlank()) {
-                    val theme = mapHolidayNameToTheme(name)
-                    list.add(
-                        HolidayInfo(
-                            dateIso = date,
-                            name = name,
-                            isNationalHoliday = true,
-                            isCutiBersama = false,
-                            themeType = theme,
-                            bannerGreeting = buildGreeting(name, theme),
-                        ),
-                    )
-                }
-            }
-            list.sortedBy { it.dateIso }
-        } finally {
-            conn.disconnect()
-        }
-    }
-
-    private fun normalizeIsoDate(raw: String, fallbackYear: Int): String? {
+    internal fun normalizeIsoDate(raw: String, fallbackYear: Int = 2026): String? {
         val match = Regex("""(\d{4})-(\d{1,2})-(\d{1,2})""").find(raw) ?: return null
         val y = match.groupValues[1].toIntOrNull() ?: fallbackYear
         val m = match.groupValues[2].toIntOrNull()?.coerceIn(1, 12) ?: return null
         val d = match.groupValues[3].toIntOrNull()?.coerceIn(1, 31) ?: return null
-        return "%04d-%02d-%02d".format(y, m, d)
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.DAY_OF_MONTH, 1)
+            set(Calendar.YEAR, y)
+            set(Calendar.MONTH, m - 1)
+        }
+        val clampedDay = d.coerceAtMost(cal.getActualMaximum(Calendar.DAY_OF_MONTH))
+        return "%04d-%02d-%02d".format(y, m, clampedDay)
     }
 
     private fun embeddedHolidaysForYear(year: Int): List<HolidayInfo> {
         val exact = embeddedHolidays().filter { it.dateIso.startsWith("$year-") }
         if (exact.isNotEmpty()) return exact
-        // Fixed annual national holidays as fallback for arbitrary future years
         return listOf(
             holiday("$year-01-01", "Tahun Baru Masehi"),
             holiday("$year-05-01", "Hari Buruh Internasional"),
@@ -186,6 +220,26 @@ object PublicHolidayService {
             holiday("$year-12-25", "Hari Raya Natal", HolidayThemeType.NATAL),
         )
     }
+
+    fun embeddedObservancesForYear(year: Int): List<HolidayInfo> = listOf(
+        observance("$year-01-25", "Hari Gizi Nasional"),
+        observance("$year-02-09", "Hari Pers Nasional"),
+        observance("$year-04-21", "Hari Kartini"),
+        observance("$year-05-02", "Hari Pendidikan Nasional"),
+        observance("$year-05-20", "Hari Kebangkitan Nasional", HolidayThemeType.INDEPENDENCE_DAY),
+        observance("$year-07-01", "Hari Bhayangkara"),
+        observance("$year-07-23", "Hari Anak Nasional"),
+        observance("$year-08-14", "Hari Pramuka"),
+        observance("$year-09-09", "Hari Olahraga Nasional"),
+        observance("$year-10-01", "Hari Kesaktian Pancasila", HolidayThemeType.INDEPENDENCE_DAY),
+        observance("$year-10-02", "Hari Batik Nasional"),
+        observance("$year-10-05", "Hari Tentara Nasional Indonesia"),
+        observance("$year-10-22", "Hari Santri Nasional", HolidayThemeType.IDUL_FITRI),
+        observance("$year-10-28", "Hari Sumpah Pemuda", HolidayThemeType.INDEPENDENCE_DAY),
+        observance("$year-11-10", "Hari Pahlawan", HolidayThemeType.INDEPENDENCE_DAY),
+        observance("$year-11-25", "Hari Guru Nasional"),
+        observance("$year-12-22", "Hari Ibu Nasional"),
+    )
 
     private fun embeddedHolidays(): List<HolidayInfo> = listOf(
         // 2025
@@ -251,8 +305,27 @@ object PublicHolidayService {
             name = name,
             isNationalHoliday = true,
             isCutiBersama = false,
+            isNationalObservance = false,
+            categoryLabel = "Libur Nasional",
             themeType = resolvedTheme,
             bannerGreeting = buildGreeting(name, resolvedTheme),
+        )
+    }
+
+    private fun observance(
+        dateIso: String,
+        name: String,
+        theme: HolidayThemeType = HolidayThemeType.NONE,
+    ): HolidayInfo {
+        return HolidayInfo(
+            dateIso = dateIso,
+            name = name,
+            isNationalHoliday = false,
+            isCutiBersama = false,
+            isNationalObservance = true,
+            categoryLabel = "Hari Nasional",
+            themeType = theme,
+            bannerGreeting = buildGreeting(name, theme),
         )
     }
 }

@@ -16,7 +16,10 @@ import com.example.MainActivity
 import com.example.R
 import com.example.data.AppDatabase
 import com.example.data.NotificationLogEntity
+import com.example.domain.AttendanceStatus
+import com.example.domain.MainTab
 import com.example.domain.NotificationCategory
+import com.example.widget.WidgetSyncHelper
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -28,6 +31,8 @@ class TaskReminderReceiver : BroadcastReceiver() {
         val timeLabel = intent.getStringExtra(EXTRA_TIME_LABEL) ?: ""
         val quadrantLabel = intent.getStringExtra(EXTRA_QUADRANT_LABEL) ?: ""
         val isCheckIn = intent.getBooleanExtra(EXTRA_IS_CHECK_IN, false)
+        val isLateFollowUp = intent.getBooleanExtra(EXTRA_IS_LATE_FOLLOWUP, false)
+        val leadOffsetMinutes = intent.getIntExtra(EXTRA_LEAD_OFFSET_MINUTES, 0)
         val isWorship = intent.getBooleanExtra(EXTRA_IS_WORSHIP, false)
         val worshipSound = intent.getBooleanExtra(EXTRA_WORSHIP_SOUND, true)
 
@@ -35,7 +40,9 @@ class TaskReminderReceiver : BroadcastReceiver() {
 
         val notifTitle = when {
             isWorship -> "Waktu Ibadah: $title"
+            isLateFollowUp -> "Belum ditandai ikut: \"$title\""
             isCheckIn -> "Lagi ikut \"$title\"?"
+            leadOffsetMinutes > 0 -> "H-$leadOffsetMinutes mnt: $title"
             else -> "Pengingat: $title"
         }
 
@@ -48,12 +55,20 @@ class TaskReminderReceiver : BroadcastReceiver() {
                 }
                 if (isEmpty()) append("Yuk luangkan waktu sebentar untuk ibadah.")
             }
+            isLateFollowUp -> buildString {
+                append("Sudah lewat 5 menit dari jadwal. Ketuk untuk konfirmasi atau tandai selesai")
+                if (timeLabel.isNotBlank()) append(" • $timeLabel")
+            }
             isCheckIn -> buildString {
                 append("Ketuk buat konfirmasi kamu hadir ya")
                 if (timeLabel.isNotBlank()) append(" • $timeLabel")
             }
             else -> buildString {
-                if (timeLabel.isNotBlank()) append("Jam: $timeLabel")
+                if (leadOffsetMinutes > 0) append("$leadOffsetMinutes menit lagi mulai")
+                if (timeLabel.isNotBlank()) {
+                    if (isNotEmpty()) append(" • ")
+                    append("Jam: $timeLabel")
+                }
                 if (quadrantLabel.isNotBlank()) {
                     if (isNotEmpty()) append(" • ")
                     append(quadrantLabel)
@@ -62,69 +77,85 @@ class TaskReminderReceiver : BroadcastReceiver() {
             }
         }
 
-        // Persist fired notification in Room NotificationLog (30-day history)
+        // Verify live Room state before logging & posting notification (stops auto-reminders once marked done/attending)
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
-            runCatching {
-                val dao = AppDatabase.getInstance(context.applicationContext).notificationLogDao()
-                dao.insertLog(
-                    NotificationLogEntity(
-                        id = 0L,
-                        category = if (isWorship) NotificationCategory.WORSHIP.name else NotificationCategory.TASK.name,
-                        title = notifTitle,
-                        message = bodyText,
-                        createdAtEpochMs = System.currentTimeMillis(),
-                        isRead = false,
-                        relatedTaskId = if (taskId > 0L) taskId else null,
-                    ),
+            try {
+                val appContext = context.applicationContext
+                val db = AppDatabase.getInstance(appContext)
+                if (!isWorship && taskId > 0L) {
+                    val liveTask = db.scheduleTaskDao().getTaskByIdOnce(taskId)
+                    val alreadyAttending = liveTask?.attendanceStatusName == AttendanceStatus.CONFIRMED_ATTENDING.name ||
+                        liveTask?.attendanceStatusName == AttendanceStatus.CONFIRMED_OVERRIDE.name
+                    if (liveTask == null || liveTask.isCompleted || alreadyAttending) {
+                        return@launch
+                    }
+                }
+
+                runCatching {
+                    db.notificationLogDao().insertLog(
+                        NotificationLogEntity(
+                            id = 0L,
+                            category = if (isWorship) NotificationCategory.WORSHIP.name else NotificationCategory.TASK.name,
+                            title = notifTitle,
+                            message = bodyText,
+                            createdAtEpochMs = System.currentTimeMillis(),
+                            isRead = false,
+                            relatedTaskId = if (taskId > 0L) taskId else null,
+                        ),
+                    )
+                }
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val granted = ContextCompat.checkSelfPermission(
+                        context,
+                        Manifest.permission.POST_NOTIFICATIONS,
+                    ) == PackageManager.PERMISSION_GRANTED
+                    if (!granted) return@launch
+                }
+
+                val openIntent = Intent(context, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra(WidgetSyncHelper.EXTRA_OPEN_TAB, MainTab.JADWAL.name)
+                    if (taskId > 0L) putExtra(EXTRA_TASK_ID, taskId)
+                }
+                val notifId = when {
+                    isWorship -> 500_000 + title.hashCode().and(0xFFFF)
+                    isLateFollowUp -> taskId.toInt() + 105_000
+                    isCheckIn -> taskId.toInt() + 100_000
+                    else -> taskId.toInt() + leadOffsetMinutes * 100
+                }
+                val pendingOpen = PendingIntent.getActivity(
+                    context,
+                    notifId,
+                    openIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
                 )
+
+                val channelId = when {
+                    isWorship && worshipSound -> CHANNEL_WORSHIP_SOUND
+                    isWorship && !worshipSound -> CHANNEL_WORSHIP_SILENT
+                    else -> CHANNEL_ID
+                }
+
+                val builder = NotificationCompat.Builder(context, channelId)
+                    .setSmallIcon(R.drawable.ic_notif_calendar)
+                    .setContentTitle(notifTitle)
+                    .setContentText(bodyText)
+                    .setPriority(if (isWorship && !worshipSound) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
+                    .setAutoCancel(true)
+                    .setContentIntent(pendingOpen)
+
+                if (isWorship && !worshipSound) {
+                    builder.setSilent(true)
+                }
+
+                runCatching {
+                    NotificationManagerCompat.from(context).notify(notifId, builder.build())
+                }
+            } finally {
+                pendingResult.finish()
             }
-            pendingResult.finish()
-        }
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val granted = ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS,
-            ) == PackageManager.PERMISSION_GRANTED
-            if (!granted) return
-        }
-
-        val openIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val notifId = when {
-            isWorship -> 500_000 + title.hashCode().and(0xFFFF)
-            isCheckIn -> taskId.toInt() + 100_000
-            else -> taskId.toInt()
-        }
-        val pendingOpen = PendingIntent.getActivity(
-            context,
-            notifId,
-            openIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-        )
-
-        val channelId = when {
-            isWorship && worshipSound -> CHANNEL_WORSHIP_SOUND
-            isWorship && !worshipSound -> CHANNEL_WORSHIP_SILENT
-            else -> CHANNEL_ID
-        }
-
-        val builder = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_notif_calendar)
-            .setContentTitle(notifTitle)
-            .setContentText(bodyText)
-            .setPriority(if (isWorship && !worshipSound) NotificationCompat.PRIORITY_DEFAULT else NotificationCompat.PRIORITY_HIGH)
-            .setAutoCancel(true)
-            .setContentIntent(pendingOpen)
-
-        if (isWorship && !worshipSound) {
-            builder.setSilent(true)
-        }
-
-        runCatching {
-            NotificationManagerCompat.from(context).notify(notifId, builder.build())
         }
     }
 
@@ -138,6 +169,8 @@ class TaskReminderReceiver : BroadcastReceiver() {
         const val EXTRA_TIME_LABEL = "extra_time_label"
         const val EXTRA_QUADRANT_LABEL = "extra_quadrant_label"
         const val EXTRA_IS_CHECK_IN = "extra_is_check_in"
+        const val EXTRA_IS_LATE_FOLLOWUP = "extra_is_late_followup"
+        const val EXTRA_LEAD_OFFSET_MINUTES = "extra_lead_offset_minutes"
         const val EXTRA_IS_WORSHIP = "extra_is_worship"
         const val EXTRA_WORSHIP_SOUND = "extra_worship_sound"
 
