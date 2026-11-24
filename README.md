@@ -1,87 +1,65 @@
-# JadwalNih v1.0
+<div align="center">
 
-**JadwalNih** adalah aplikasi pengatur jadwal harian, prioritas Kuadran Eisenhower (K1–K4), timer fokus bebas, rekap foto harian, serta pengingat ibadah & tema Hari Raya otomatis untuk Android berbasis Kotlin & Jetpack Compose.
+# 🗓️ JadwalNih
+### **My Productive Day • Daily Planner, Worship & Photo Recap App**
 
----
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.0+-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![Jetpack Compose](https://img.shields.io/badge/Jetpack_Compose-Material_3-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![Release](https://img.shields.io/badge/Release-v1.0.0_Stable-10B981?style=for-the-badge&logo=github&logoColor=white)](https://github.com/devandewa/jadwalnih/releases)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)](LICENSE)
 
-## Fitur Utama v1.0
+*A feature-rich, beautiful Android productivity suite combining smart scheduling, Islamic & cross-religion worship tracking, interactive maps, photo recaps, and immersive festive holiday themes.*
 
-### 1. Jadwal Fleksibel & Kuadran Prioritas (K1–K4)
-- **Kelompok prioritas K1–K4**: Penting & Mendesak (K1), Penting & Kapan Aja (K2), Biasa & Mendesak (K3), hingga Biasa & Santai (K4).
-- **Tampilan Harian, Mingguan, dan Bulanan**: Dilengkapi ringkasan beban waktu harian dan indikator bentrok jam otomatis.
-- **Bayangan Jadwal Berulang (4 Minggu Ke Depan)**: Jadwal berulang mingguan otomatis menampilkan kartu bayangan samar hingga 4 minggu mendatang, bisa diaktifkan & diedit lebih awal atau dilewati untuk minggu tertentu, serta otomatis terwujud saat minggu tiba.
-- **Konfirmasi Hapus Aman + Urungkan**: Setiap penghapusan (jadwal satuan, seluruh seri berulang, sub-langkah, draf, foto rekap, hingga riwayat notifikasi) meminta konfirmasi terlebih dahulu dan menyediakan tombol **Urungkan** singkat.
-
-### 2. Impor Multi-Jadwal Lewat AI + 136 Ikon Otomatis
-- **Impor banyak jadwal sekaligus**: Tempel array JSON hasil AI untuk banyak kegiatan lintas hari/minggu.
-- **Pratinjau Edit Langsung**: Ubah judul, jam mulai/selesai, kuadran K1–K4, atau ikon sebelum menyimpan massal.
-- **Deteksi & Pilihan Bentrok**: Saat ada jam yang bertabrakan dengan jadwal lama, pilih **Timpa jadwal lama**, **Simpan yang lama saja**, atau **Biarkan bentrok**.
-- **136 Ikon Jadwal**: Pemilihan ikon otomatis berdasarkan kata kunci judul Bahasa Indonesia/Inggris, lengkap dengan pencari ikon di editor dan dukungan ikon pada Widget & layar Fokus.
-
-#### Template Prompt & Format JSON Impor AI
-Salin prompt siap pakai langsung dari tab **Otomatis (AI)** di dalam aplikasi, atau gunakan format JSON berikut:
-
-```json
-[
-  {
-    "title": "Rapat Koordinasi Proyek",
-    "date": "2026-11-23",
-    "startTime": "09:00",
-    "endTime": "10:30",
-    "priority": "K1",
-    "icon": "meeting_room",
-    "location": "Ruang Rapat Lantai 2",
-    "reminderMinutes": 15,
-    "notes": "Siapkan slide progres mingguan",
-    "checklist": ["Cek laporan tim", "Kirim agenda"]
-  }
-]
-```
-
-### 3. Pusat Notifikasi & Pemulihan 5 Draf
-- Ikon lonceng di sebelah ikon Pengaturan menyimpan riwayat pengingat tugas, waktu ibadah, Hari Raya (otomatis dibersihkan setelah 30 hari), dan hingga **5 draf edit terakhir** agar tidak hilang jika editor tertutup tanpa sengaja.
-
-### 4. Pengingat Sholat 5 Waktu & Ibadah Multi-Agama
-- Mendukung pilihan **Islam** (5 waktu sholat harian sesuai **API MyQuran Kemenag** dengan pencocokan kota otomatis dan cadangan kalkulasi astronomi Kemenag offline), serta jadwal doa harian & ibadah mingguan untuk **Kristen**, **Katolik**, **Hindu**, **Buddha**, dan **Konghucu**.
-- Dapat dicentang selesai lengkap dengan hitung mundur waktu berikutnya, suara/mode senyap di Pengaturan, kartu ringkasan mingguan di tab **Analitik**, pengingat lembut yang tidak memutus timer di tab **Fokus**, serta tombol ganda langsung di **Widget** layar utama.
-
-### 5. Hari Raya Nasional & Tema Dinamis
-- Mengambil daftar hari libur nasional & cuti bersama Indonesia dari API lokal **DayOffAPI** dan **ApiHariLibur** (dengan cadangan kalender lokal offline).
-- Tema warna, ornamen header, spanduk sapaan, dan latar samar daftar jadwal otomatis menyesuaikan tema **Kemerdekaan RI (Merah Putih)**, **Idul Fitri**, **Imlek**, **Natal**, maupun **Nyepi / Waisak** saat hari H — atau bisa dicoba kapan saja lewat opsi Pratinjau di Pengaturan.
-
-### 6. Lokasi GPS Otomatis, Pemilih Wilayah Indonesia, Timer Fokus & Rekap Foto
-- **Lokasi GPS & Pemilih Provinsi/Kota Indonesia**: Meminta izin `ACCESS_COARSE_LOCATION` satu kali setelah animasi pembuka selesai, dilengkapi pemilih bertingkat **Provinsi -> Kabupaten/Kota** (**API Wilayah Indonesia Emsifa v2** lengkap dengan koordinat otomatis & fallback offline) di **Pengaturan** maupun **Editor Jadwal**. Dipakai untuk nama lokasi jadwal, metadata lokasi di Rekap Foto (galeri & lightbox), serta akurasi waktu sholat Kemenag.
-- **Rekap Foto Harian**: Kamera bawaan CameraX + Photo Picker (tanpa izin baca galeri luas), cap waktu & gaya teks, kolase JPEG, dan metadata lokasi pengambilan foto.
+</div>
 
 ---
 
-## Ringkasan Privasi & Izin
-- **Semua data utama tersimpan lokal** di perangkat pengguna (Room Database & DataStore).
-- **Kamera (`CAMERA`)**: Hanya aktif saat mengambil foto di tab Rekap; memilih foto dari galeri memakai Android Photo Picker tanpa izin penyimpanan luas.
-- **Lokasi Perkiraan (`ACCESS_COARSE_LOCATION`)**: Opsional; hanya untuk menamai tempat jadwal/rekap dan akurasi jam sholat.
-- **Notifikasi (`POST_NOTIFICATIONS`)**: Opsional; untuk pengingat jadwal, konfirmasi kehadiran, dan pengingat ibadah.
-- Tersedia fitur **Ekspor & Impor Cadangan JSON** lengkap di Pengaturan (mencakup jadwal, sesi fokus, rekap foto, pengaturan agama/lokasi, serta riwayat notifikasi).
+## 📸 Preview & Banner
+
+<div align="center">
+  <img src="app/src/main/res/drawable/jadwalnih_hero_banner_1795541698255.jpg" width="100%" alt="JadwalNih Hero Banner" />
+</div>
 
 ---
 
-## Teknologi
-- **Bahasa**: Kotlin
-- **UI**: Jetpack Compose + Material Design 3 (`JadwalNihTheme`)
-- **Database & Preferensi**: Room (`AppDatabase` v5), Jetpack DataStore
-- **Kamera & Media**: CameraX, Coil, Android Photo Picker
-- **Widget**: Jetpack Glance (`PriorityQuadrantWidget`)
-- **Pengujian**: JUnit 4 + Robolectric + Compose UI Test + Glance AppWidget Unit Test
+## ✨ Core Features
+
+- 📅 **Unified Calendar & Timeline (Kalender Terpadu)**: Seamless monthly calendar grid integrating tasks, national red holidays, golden national observances, birthdays, and photo recaps in one harmonious screen.
+- 🕌 **Smart Worship & Prayer Tracker**: Automatically displays contextual prayer/worship reminder cards during active prayer windows, supporting manual check-ins and missed prayer history logs.
+- 🗺️ **Interactive Location Pinpointing & Map**: Pinpoint activity locations directly on interactive maps or open coordinates instantly in Google Maps.
+- 🎂 **Birthday & Usage Statistics**: Celebrate your special day with full-screen birthday overlays (cake, candles, balloons, confetti) and usage duration statistics.
+- 🎆 **Immersive Thematic Atmosphere & Motion Graphics**: Dynamic wallpaper backgrounds and one-time expressive motion graphic animations for national holidays (Independence Day, Eid, Imlek, Christmas, Waisak) and birthdays.
+- 📊 **Analytics & Quick Glance**: Powerful productivity analytics, focus timer sessions, and customizable quick glance dashboard widgets.
 
 ---
 
-## Build & Pengujian
+## 🛠️ Tech Stack & Architecture
 
-Jalankan pengujian unit & Robolectric:
-```bash
-gradle :app:testDebugUnitTest
-```
+- **Language**: 100% Kotlin
+- **UI Framework**: Jetpack Compose with Material Design 3 (M3)
+- **Architecture**: MVVM (Model-View-ViewModel) with Kotlin Coroutines & Flow
+- **Persistence**: Room Database & DataStore Preferences
+- **Navigation**: Navigation Compose with Type-Safe Routing & Edge-to-Edge support
 
-Bangun APK debug:
-```bash
-gradle assembleDebug
-```
+---
+
+## 🚀 Quick Start
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/devandewa/jadwalnih.git
+   ```
+2. Open the project in **Android Studio Koala or newer**.
+3. Sync Gradle and run `gradle :app:assembleDebug` or click **Run** on your emulator/device.
+
+---
+
+## 📦 Releases
+
+Check out the [Releases Page](https://github.com/devandewa/jadwalnih/releases) to download the latest signed APK for **v1.0.0 Stable**.
+
+---
+
+## 📝 License
+
+Distributed under the MIT License. See [LICENSE](LICENSE) for more information.
